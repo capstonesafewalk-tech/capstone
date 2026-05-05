@@ -96,7 +96,7 @@ export default function HomeScreen() {
       <View style={styles.container}>
         {/* Header - KEPT UNCHANGED */}
         <View style={styles.header}>
-          <Text style={[styles.kicker, { color: colors.primary }]}>Good evening</Text>
+          <Text style={[styles.kicker, { color: colors.primary }]}>Good Day</Text>
           <Text style={[styles.title, { color: colors.text }]}>Welcome, {welcomeName}.</Text>
           <Text style={[styles.subtitle, { color: colors.muted }]}>Your live safety dashboard is active and updating nearby risk zones.</Text>
         </View>

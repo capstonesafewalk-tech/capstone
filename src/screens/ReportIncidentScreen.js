@@ -26,8 +26,13 @@ export default function ReportIncidentScreen() {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [gpsLocation, setGpsLocation] = useState(null);
+  const [reportDateTime, setReportDateTime] = useState('');
 
   useEffect(() => {
+    const now = new Date();
+    const formatted = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    setReportDateTime(formatted);
+
     // Get current GPS location for the report
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -134,6 +139,8 @@ export default function ReportIncidentScreen() {
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={[styles.locationLabel, { color: colors.muted }]}>Current Location</Text>
               <Text style={[styles.locationValue, { color: colors.text }]}>{location}</Text>
+              <Text style={[styles.dateTimeLabel, { color: colors.muted, marginTop: 6 }]}>Report Time</Text>
+              <Text style={[styles.dateTimeValue, { color: colors.text }]}>{reportDateTime}</Text>
             </View>
           </View>
         </AppCard>
@@ -259,6 +266,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginTop: 4,
+  },
+  dateTimeLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  dateTimeValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
   },
   sectionTitle: {
     fontSize: 16,

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/apiService';
-import { Trash2, Edit2, RotateCcw, Plus } from 'lucide-react';
+import { Trash2, Edit2, RotateCcw, Plus, AlertCircle } from 'lucide-react';
 
 const CrimeManagementPage = () => {
   const [crimes, setCrimes] = useState([]);
   const [archivedCrimes, setArchivedCrimes] = useState([]);
+  const [incidents, setIncidents] = useState([]);
   const [activeTab, setActiveTab] = useState('active');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -17,18 +18,20 @@ const CrimeManagementPage = () => {
   });
 
   useEffect(() => {
-    fetchCrimes();
+    fetchData();
   }, []);
 
-  const fetchCrimes = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
       const activeCrimesData = await apiService.getCrimes();
       const archivedCrimesData = await apiService.getArchivedCrimes();
+      const incidentsData = await apiService.getIncidents();
       setCrimes(activeCrimesData);
       setArchivedCrimes(archivedCrimesData);
+      setIncidents(incidentsData.incidents || []);
     } catch (error) {
-      console.error('Failed to fetch crimes:', error);
+      console.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
@@ -48,7 +51,7 @@ const CrimeManagementPage = () => {
           timestamp: new Date(formData.timestamp).toISOString(),
         });
       }
-      fetchCrimes();
+      fetchData();
       setShowForm(false);
       setEditingId(null);
       setFormData({
@@ -65,7 +68,7 @@ const CrimeManagementPage = () => {
   const handleArchive = async (id) => {
     try {
       await apiService.archiveCrime(id);
-      fetchCrimes();
+      fetchData();
     } catch (error) {
       console.error('Failed to archive crime:', error);
     }
@@ -74,9 +77,18 @@ const CrimeManagementPage = () => {
   const handleRestore = async (id) => {
     try {
       await apiService.restoreCrime(id);
-      fetchCrimes();
+      fetchData();
     } catch (error) {
       console.error('Failed to restore crime:', error);
+    }
+  };
+
+  const handleUpdateIncidentStatus = async (id, newStatus) => {
+    try {
+      await apiService.updateIncident(id, newStatus);
+      fetchData();
+    } catch (error) {
+      console.error('Failed to update incident:', error);
     }
   };
 
@@ -99,17 +111,19 @@ const CrimeManagementPage = () => {
     <div className="p-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-800">Crime Management</h1>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-blue-700"
-        >
-          <Plus size={20} className="mr-2" />
-          Add Crime Report
-        </button>
+        {activeTab !== 'incidents' && (
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-blue-700"
+          >
+            <Plus size={20} className="mr-2" />
+            Add Crime Report
+          </button>
+        )}
       </div>
 
-      {/* Form */}
-      {showForm && (
+      {/* Form - Only show for crimes tab */}
+      {showForm && activeTab !== 'incidents' && (
         <div className="bg-white rounded-lg shadow p-6 mb-8">
           <h2 className="text-xl font-bold mb-4">{editingId ? 'Edit Crime Report' : 'Add New Crime Report'}</h2>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -192,63 +206,123 @@ const CrimeManagementPage = () => {
         >
           Archived Crimes ({archivedCrimes.length})
         </button>
+        <button
+          onClick={() => setActiveTab('incidents')}
+          className={`px-4 py-2 font-bold ${activeTab === 'incidents' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
+        >
+          User Reports ({incidents.length})
+        </button>
       </div>
 
-      {/* Crime Table */}
+      {/* Crime/Incident Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="text-left p-4">ID</th>
-              <th className="text-left p-4">Type</th>
-              <th className="text-left p-4">Latitude</th>
-              <th className="text-left p-4">Longitude</th>
-              <th className="text-left p-4">Date & Time</th>
-              <th className="text-left p-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayCrimes.map((crime) => (
-              <tr key={crime.id} className="border-b hover:bg-gray-50">
-                <td className="p-4">{crime.id}</td>
-                <td className="p-4">{crime.crime_type}</td>
-                <td className="p-4">{crime.latitude.toFixed(4)}</td>
-                <td className="p-4">{crime.longitude.toFixed(4)}</td>
-                <td className="p-4">{new Date(crime.timestamp).toLocaleString()}</td>
-                <td className="p-4 flex gap-2">
-                  {activeTab === 'active' ? (
-                    <>
-                      <button
-                        onClick={() => handleEdit(crime)}
-                        className="text-blue-600 hover:text-blue-800"
-                        title="Edit"
-                      >
-                        <Edit2 size={18} />
-                      </button>
-                      <button
-                        onClick={() => handleArchive(crime.id)}
-                        className="text-red-600 hover:text-red-800"
-                        title="Archive"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => handleRestore(crime.id)}
-                      className="text-green-600 hover:text-green-800"
-                      title="Restore"
-                    >
-                      <RotateCcw size={18} />
-                    </button>
-                  )}
-                </td>
+        {activeTab !== 'incidents' ? (
+          // Crime Table
+          <table className="w-full">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="text-left p-4">ID</th>
+                <th className="text-left p-4">Type</th>
+                <th className="text-left p-4">Latitude</th>
+                <th className="text-left p-4">Longitude</th>
+                <th className="text-left p-4">Date & Time</th>
+                <th className="text-left p-4">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {displayCrimes.length === 0 && (
-          <div className="p-8 text-center text-gray-500">No crimes found</div>
+            </thead>
+            <tbody>
+              {displayCrimes.map((crime) => (
+                <tr key={crime.id} className="border-b hover:bg-gray-50">
+                  <td className="p-4">{crime.id}</td>
+                  <td className="p-4">{crime.crime_type}</td>
+                  <td className="p-4">{crime.latitude.toFixed(4)}</td>
+                  <td className="p-4">{crime.longitude.toFixed(4)}</td>
+                  <td className="p-4">{new Date(crime.timestamp).toLocaleString()}</td>
+                  <td className="p-4 flex gap-2">
+                    {activeTab === 'active' ? (
+                      <>
+                        <button
+                          onClick={() => handleEdit(crime)}
+                          className="text-blue-600 hover:text-blue-800"
+                          title="Edit"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleArchive(crime.id)}
+                          className="text-red-600 hover:text-red-800"
+                          title="Archive"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => handleRestore(crime.id)}
+                        className="text-green-600 hover:text-green-800"
+                        title="Restore"
+                      >
+                        <RotateCcw size={18} />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          // Incident Table
+          <table className="w-full">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="text-left p-4">ID</th>
+                <th className="text-left p-4">Type</th>
+                <th className="text-left p-4">Description</th>
+                <th className="text-left p-4">Location</th>
+                <th className="text-left p-4">Status</th>
+                <th className="text-left p-4">Date</th>
+                <th className="text-left p-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {incidents.map((incident) => (
+                <tr key={incident.id} className="border-b hover:bg-gray-50">
+                  <td className="p-4 text-sm">{incident.id}</td>
+                  <td className="p-4">
+                    <span className="inline-flex items-center gap-1">
+                      <AlertCircle size={16} />
+                      {incident.type}
+                    </span>
+                  </td>
+                  <td className="p-4 text-sm max-w-xs truncate">{incident.description}</td>
+                  <td className="p-4 text-sm">{incident.location}</td>
+                  <td className="p-4">
+                    <select
+                      value={incident.status}
+                      onChange={(e) => handleUpdateIncidentStatus(incident.id, e.target.value)}
+                      className="px-2 py-1 border rounded text-sm"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="under_review">Under Review</option>
+                      <option value="resolved">Resolved</option>
+                    </select>
+                  </td>
+                  <td className="p-4 text-sm">{new Date(incident.timestamp).toLocaleString()}</td>
+                  <td className="p-4">
+                    <span className={`px-2 py-1 rounded text-xs font-bold ${
+                      incident.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      incident.status === 'under_review' ? 'bg-blue-100 text-blue-800' :
+                      'bg-green-100 text-green-800'
+                    }`}>
+                      {incident.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {(activeTab === 'active' || activeTab === 'archived' ? displayCrimes : incidents).length === 0 && (
+          <div className="p-8 text-center text-gray-500">No {activeTab === 'incidents' ? 'user reports' : 'crimes'} found</div>
         )}
       </div>
     </div>

@@ -64,4 +64,26 @@ export const apiService = {
     });
     return response.data;
   },
+
+  // Incident endpoints
+  getIncidents: async () => {
+    const response = await axios.get(`${API_BASE_URL}/incidents`, {
+      headers: getAuthHeader(),
+    });
+    return response.data;
+  },
+
+  getIncidentById: async (id) => {
+    const response = await axios.get(`${API_BASE_URL}/incidents/${id}`, {
+      headers: getAuthHeader(),
+    });
+    return response.data;
+  },
+
+  updateIncident: async (id, status) => {
+    const response = await axios.patch(`${API_BASE_URL}/incidents/${id}`, { status }, {
+      headers: getAuthHeader(),
+    });
+    return response.data;
+  },
 };
