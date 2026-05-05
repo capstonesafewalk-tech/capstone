@@ -4,8 +4,10 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAppTheme } from '../theme/theme';
 import HomeScreen from '../screens/HomeScreen';
+import MapScreen from '../screens/MapScreen';
 import AlertScreen from '../screens/AlertScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import ReportIncidentScreen from '../screens/ReportIncidentScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -34,7 +36,9 @@ export default function TabNavigator() {
         tabBarIcon: ({ color, size, focused }) => {
           const icons = {
             Home: focused ? 'home' : 'home-outline',
+            Map: focused ? 'map' : 'map-outline',
             Alerts: focused ? 'warning' : 'warning-outline',
+            Report: focused ? 'alert' : 'alert-outline',
             Profile: focused ? 'person' : 'person-outline',
           };
 
@@ -43,7 +47,9 @@ export default function TabNavigator() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Map" component={MapScreen} />
       <Tab.Screen name="Alerts" component={AlertScreen} />
+      <Tab.Screen name="Report" component={ReportIncidentScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );

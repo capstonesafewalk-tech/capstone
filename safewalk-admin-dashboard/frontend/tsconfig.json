@@ -5,6 +5,8 @@
     "jsx": "react-jsx",
     "module": "esnext",
     "moduleResolution": "node",
+    "noEmit": true,
+    "ignoreDeprecations": "6.0",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { apiService } from '../services/apiService';
 import { AlertCircle, MapPin, TrendingUp } from 'lucide-react';
 
@@ -18,7 +18,13 @@ const DashboardPage = () => {
       const data = await apiService.getStatistics();
       setStats(data);
     } catch (err) {
-      setError('Failed to fetch statistics');
+      console.error('Statistics fetch error:', err.response?.data || err.message || err);
+      const serverError = err.response?.data?.error;
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        setError(serverError || 'Authentication required. Please log in again.');
+      } else {
+        setError(serverError || 'Failed to fetch statistics');
+      }
     } finally {
       setLoading(false);
     }

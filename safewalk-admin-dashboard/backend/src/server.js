@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
 const crimeRoutes = require('./routes/crimes');
+const incidentRoutes = require('./routes/incidents');
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // Routes
 app.use('/auth', authRoutes);
 app.use('/crimes', crimeRoutes);
+app.use('/incidents', incidentRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

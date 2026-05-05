@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS crimes (
 -- Insert sample data (optional)
 -- Sample admin: admin@safewalk.com / password123 (hash it properly in production)
 INSERT INTO admins (email, password) VALUES 
-('admin@safewalk.com', '$2a$10$8QI7.H7.X5.9x5.5.5.5uuuuuuuuuuuuuuuuuuuuu');
+('admin@safewalk.com', '$2a$10$uefp2k4WBeCoLVu9Q4mExuYq6mjNi24T12M.XmgMBxboGSESollVi');
 
 -- Sample crime data
 INSERT INTO crimes (latitude, longitude, crime_type, timestamp, status) VALUES

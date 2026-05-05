@@ -1,102 +1,152 @@
-import React, { useMemo } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Alert, StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 
 import AppButton from '../components/AppButton';
 import AppCard from '../components/AppCard';
 import { useAuth } from '../context/AuthContext';
-import { homeStats } from '../data/mockData';
 import { useToast } from '../components/Toast';
 import { useAppTheme } from '../theme/theme';
+
+// Mock data
+const MOCK_USERS = [
+  { id: '1', name: 'Juan Dela Cruz' },
+  { id: '2', name: 'Maria Santos' },
+  { id: '3', name: 'Pedro Reyes' }
+];
+
+const MOCK_FRIENDS = [
+  { id: '4', name: 'Ana Lopez' },
+  { id: '5', name: 'Mark Diaz' }
+];
 
 export default function HomeScreen() {
   const { colors } = useAppTheme();
   const { user } = useAuth();
   const toast = useToast();
 
+  const [searchInput, setSearchInput] = useState('');
+  const [selectedUsers, setSelectedUsers] = useState([]);
+
   const welcomeName = useMemo(() => user?.name || 'SAFEWALK User', [user]);
 
-  const handleRoute = () => {
-    toast.show('Safe route suggested based on current alert density.', 'info');
+  // Filter users based on search input
+  const filteredUsers = useMemo(() => {
+    if (!searchInput.trim()) return MOCK_USERS;
+    return MOCK_USERS.filter(u =>
+      u.name.toLowerCase().includes(searchInput.toLowerCase())
+    );
+  }, [searchInput]);
+
+  // Toggle user selection
+  const toggleUserSelection = (userId) => {
+    setSelectedUsers(prev =>
+      prev.includes(userId)
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
   };
 
-  const handleSOS = () => {
-    Alert.alert('SOS Triggered', 'Emergency contacts and nearby responders would be notified here.');
+  // Handle create group
+  const handleCreateGroup = () => {
+    if (selectedUsers.length === 0) {
+      Alert.alert('No Users Selected', 'Select at least one user to create a group.');
+      return;
+    }
+    toast.show('Group created successfully!', 'success');
+    setSelectedUsers([]);
+    setSearchInput('');
   };
 
-  const handleReport = () => {
-    Alert.alert('Incident Report', 'Incident reporting flow is ready for expansion.');
+  // Render user item for Find Users
+  const renderUserItem = ({ item }) => {
+    const isSelected = selectedUsers.includes(item.id);
+    return (
+      <TouchableOpacity
+        onPress={() => toggleUserSelection(item.id)}
+        style={[
+          styles.userItem,
+          {
+            backgroundColor: isSelected ? colors.softBlue : colors.surface,
+            borderColor: isSelected ? colors.primary : colors.border
+          }
+        ]}
+      >
+        <View style={styles.userContent}>
+          <Text style={[styles.userName, { color: colors.text }]}>{item.name}</Text>
+        </View>
+        {isSelected && (
+          <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  // Render friend item
+  const renderFriendItem = ({ item }) => {
+    return (
+      <AppCard style={[styles.friendItem, { backgroundColor: colors.surface }]}>
+        <Text style={[styles.friendName, { color: colors.text }]}>{item.name}</Text>
+      </AppCard>
+    );
   };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={styles.container}>
+        {/* Header - KEPT UNCHANGED */}
         <View style={styles.header}>
           <Text style={[styles.kicker, { color: colors.primary }]}>Good evening</Text>
           <Text style={[styles.title, { color: colors.text }]}>Welcome, {welcomeName}.</Text>
           <Text style={[styles.subtitle, { color: colors.muted }]}>Your live safety dashboard is active and updating nearby risk zones.</Text>
         </View>
 
-        <AppCard style={styles.mapCard}>
-          <LinearGradient colors={[colors.primaryDark, colors.primary, colors.accent]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.mapHero}>
-            <View style={styles.mapBadge}>
-              <Ionicons name="location" size={16} color="#FFFFFF" />
-              <Text style={styles.mapBadgeText}>Live Location Enabled</Text>
-            </View>
-            <Text style={styles.mapTitle}>Map Placeholder</Text>
-            <Text style={styles.mapCopy}>Nearby routes, high-risk zones, and emergency exits would render here.</Text>
-          </LinearGradient>
+        {/* Find Users Section */}
+        <AppCard style={styles.sectionCard}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Find Users</Text>
+
+          <TextInput
+            style={[
+              styles.searchInput,
+              {
+                backgroundColor: colors.surface,
+                color: colors.text,
+                borderColor: colors.border
+              }
+            ]}
+            placeholder="Search users..."
+            placeholderTextColor={colors.muted}
+            value={searchInput}
+            onChangeText={setSearchInput}
+          />
         </AppCard>
 
-        <View style={styles.statsRow}>
-          {homeStats.map((item) => {
-            const toneColors = {
-              danger: colors.softRed,
-              success: colors.softGreen,
-              primary: colors.softBlue,
-            };
+        {/* Selected users count */}
+        {selectedUsers.length > 0 && (
+          <Text style={[styles.selectedCount, { color: colors.primary }]}>
+            {selectedUsers.length} {selectedUsers.length === 1 ? 'user' : 'users'} selected
+          </Text>
+        )}
 
-            return (
-              <AppCard key={item.label} style={[styles.statCard, { backgroundColor: toneColors[item.tone] }]}>
-                <Text style={[styles.statLabel, { color: colors.muted }]}>{item.label}</Text>
-                <Text style={[styles.statValue, { color: colors.text }]}>{item.value}</Text>
-              </AppCard>
-            );
-          })}
-        </View>
+        {/* Your Friends Section */}
+        <AppCard style={styles.sectionCard}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Friends</Text>
 
-        <AppCard style={styles.statusCard}>
-          <View style={styles.statusTopRow}>
-            <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Safety Status</Text>
-              <Text style={[styles.sectionCopy, { color: colors.muted }]}>Route conditions are currently moderate with two low-risk corridors nearby.</Text>
-            </View>
-            <View style={[styles.pill, { backgroundColor: colors.softGreen }]}>
-              <Text style={[styles.pillText, { color: colors.success }]}>Protected</Text>
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryItem}>
-              <Ionicons name="warning-outline" size={18} color={colors.warning} />
-              <Text style={[styles.summaryText, { color: colors.text }]}>3 active alerts in your area</Text>
-            </View>
-            <View style={styles.summaryItem}>
-              <Ionicons name="shield-checkmark-outline" size={18} color={colors.primary} />
-              <Text style={[styles.summaryText, { color: colors.text }]}>Safe corridors updated 2 min ago</Text>
-            </View>
-          </View>
+          <FlatList
+            data={MOCK_FRIENDS}
+            keyExtractor={item => item.id}
+            renderItem={renderFriendItem}
+            scrollEnabled={false}
+            style={styles.friendsList}
+          />
         </AppCard>
 
-        <View style={styles.actionsRow}>
-          <AppButton title="Find Safe Route" onPress={handleRoute} style={styles.actionButton} />
-          <AppButton title="SOS" variant="danger" onPress={handleSOS} style={styles.actionButton} />
-        </View>
-
-        <AppButton title="Report Incident" variant="secondary" onPress={handleReport} />
+        {/* Create Group Button */}
+        <AppButton
+          title="Create Group"
+          onPress={handleCreateGroup}
+          style={styles.createButton}
+        />
       </View>
     </View>
   );
@@ -113,7 +163,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   header: {
-    marginBottom: 16,
+    marginBottom: 24,
   },
   kicker: {
     fontSize: 13,
@@ -132,119 +182,62 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  mapCard: {
-    padding: 0,
-    overflow: 'hidden',
-    marginBottom: 14,
-  },
-  mapHero: {
-    minHeight: 190,
-    borderRadius: 24,
-    padding: 18,
-    justifyContent: 'flex-end',
-  },
-  mapBadge: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    marginBottom: 40,
-  },
-  mapBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  mapTitle: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '800',
-    marginBottom: 6,
-  },
-  mapCopy: {
-    color: 'rgba(255,255,255,0.88)',
-    fontSize: 13,
-    lineHeight: 19,
-    maxWidth: '92%',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 14,
-  },
-  statCard: {
-    flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-  },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    marginBottom: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  statValue: {
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  statusCard: {
-    marginBottom: 14,
-  },
-  statusTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
+  sectionCard: {
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '800',
-    marginBottom: 6,
+    marginBottom: 12,
   },
-  sectionCopy: {
-    fontSize: 13,
-    lineHeight: 19,
-    maxWidth: 250,
-  },
-  pill: {
-    alignSelf: 'flex-start',
+  searchInput: {
+    borderWidth: 1,
+    borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
+    paddingVertical: 10,
+    fontSize: 14,
+    marginBottom: 12,
   },
-  pillText: {
-    fontSize: 12,
-    fontWeight: '800',
+  usersList: {
+    gap: 8,
   },
-  divider: {
-    height: 1,
-    marginVertical: 16,
-    opacity: 0.8,
-    backgroundColor: '#CBD5E1',
-  },
-  summaryRow: {
-    gap: 12,
-  },
-  summaryItem: {
+  userItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
   },
-  summaryText: {
-    fontSize: 13,
+  userContent: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 14,
     fontWeight: '600',
-    flex: 1,
   },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 14,
+  selectedCount: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 8,
+    marginLeft: 4,
   },
-  actionButton: {
-    flex: 1,
+  friendsList: {
+    gap: 8,
+  },
+  friendItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    borderRadius: 8,
+  },
+  friendName: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  createButton: {
+    marginTop: 8,
   },
 });

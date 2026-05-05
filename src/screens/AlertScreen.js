@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import AppButton from '../components/AppButton';
@@ -34,8 +34,8 @@ export default function AlertScreen() {
     }, 900);
   }, [toast]);
 
-  const reroute = () => {
-    toast.show('Safe path reroute suggested for your current area.', 'info');
+  const handleSOS = () => {
+    toast.show('SOS signal sent to emergency contacts!', 'success');
   };
 
   return (
@@ -48,17 +48,22 @@ export default function AlertScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         ListHeaderComponent={
           <View>
-            <View style={[styles.banner, { backgroundColor: colors.softRed, borderColor: colors.danger }]}> 
-              <Ionicons name="warning" size={20} color={colors.danger} />
-              <Text style={[styles.bannerText, { color: colors.danger }]}>Crime increased by 50% in this area</Text>
-            </View>
-
             <View style={styles.headerBlock}>
-              <Text style={[styles.title, { color: colors.text }]}>Active Alerts</Text>
-              <Text style={[styles.subtitle, { color: colors.muted }]}>Monitor nearby incidents and update your route before you leave.</Text>
+              <View style={styles.headerTop}>
+                <View style={styles.headerText}>
+                  <Text style={[styles.title, { color: colors.text }]}>Active Alerts</Text>
+                  <Text style={[styles.subtitle, { color: colors.muted }]}>Monitor nearby incidents and update your route before you leave.</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={handleSOS}
+                  style={styles.sosButton}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.sosButtonText}>SOS</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
-            <AppButton title="Reroute to Safe Path" onPress={reroute} style={styles.routeButton} />
           </View>
         }
         renderItem={({ item }) => (
@@ -103,23 +108,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 18,
   },
-  banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    marginBottom: 14,
-  },
-  bannerText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '800',
-  },
   headerBlock: {
     marginBottom: 14,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  headerText: {
+    flex: 1,
   },
   title: {
     fontSize: 28,
@@ -130,8 +129,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  routeButton: {
-    marginBottom: 16,
+  sosButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#FF5252',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#D32F2F',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+    elevation: 12,
+  },
+  sosButtonText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   card: {
     paddingVertical: 16,
