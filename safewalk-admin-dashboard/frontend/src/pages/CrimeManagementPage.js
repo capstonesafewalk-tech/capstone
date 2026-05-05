@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/apiService';
-import { Trash2, Edit2, RotateCcw, Plus, AlertCircle } from 'lucide-react';
+import { Trash2, Edit2, RotateCcw, Plus, AlertCircle, CheckCircle, Archive } from 'lucide-react';
 
 const CrimeManagementPage = () => {
   const [crimes, setCrimes] = useState([]);
@@ -89,6 +89,35 @@ const CrimeManagementPage = () => {
       fetchData();
     } catch (error) {
       console.error('Failed to update incident:', error);
+    }
+  };
+
+  const handleApproveIncident = async (incident) => {
+    try {
+      // First approve the incident on the backend
+      await apiService.approveIncident(incident.id);
+      
+      // Then create a new crime record from the incident data
+      await apiService.createCrime({
+        latitude: incident.lat || 0,
+        longitude: incident.lng || 0,
+        crimeType: incident.type || 'Other',
+        timestamp: incident.timestamp || new Date().toISOString(),
+      });
+
+      // Refresh the data
+      fetchData();
+    } catch (error) {
+      console.error('Failed to approve incident:', error);
+    }
+  };
+
+  const handleArchiveIncident = async (id) => {
+    try {
+      await apiService.deleteIncident(id);
+      fetchData();
+    } catch (error) {
+      console.error('Failed to archive incident:', error);
     }
   };
 
@@ -278,7 +307,6 @@ const CrimeManagementPage = () => {
                 <th className="text-left p-4">Type</th>
                 <th className="text-left p-4">Description</th>
                 <th className="text-left p-4">Location</th>
-                <th className="text-left p-4">Status</th>
                 <th className="text-left p-4">Date</th>
                 <th className="text-left p-4">Actions</th>
               </tr>
@@ -295,26 +323,24 @@ const CrimeManagementPage = () => {
                   </td>
                   <td className="p-4 text-sm max-w-xs truncate">{incident.description}</td>
                   <td className="p-4 text-sm">{incident.location}</td>
-                  <td className="p-4">
-                    <select
-                      value={incident.status}
-                      onChange={(e) => handleUpdateIncidentStatus(incident.id, e.target.value)}
-                      className="px-2 py-1 border rounded text-sm"
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="under_review">Under Review</option>
-                      <option value="resolved">Resolved</option>
-                    </select>
-                  </td>
                   <td className="p-4 text-sm">{new Date(incident.timestamp).toLocaleString()}</td>
-                  <td className="p-4">
-                    <span className={`px-2 py-1 rounded text-xs font-bold ${
-                      incident.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                      incident.status === 'under_review' ? 'bg-blue-100 text-blue-800' :
-                      'bg-green-100 text-green-800'
-                    }`}>
-                      {incident.status}
-                    </span>
+                  <td className="p-4 flex gap-2">
+                    <button
+                      onClick={() => handleApproveIncident(incident)}
+                      className="text-green-600 hover:text-green-800 flex items-center gap-1"
+                      title="Approve and move to active crimes"
+                    >
+                      <CheckCircle size={18} />
+                      <span className="text-xs">Approve</span>
+                    </button>
+                    <button
+                      onClick={() => handleArchiveIncident(incident.id)}
+                      className="text-red-600 hover:text-red-800 flex items-center gap-1"
+                      title="Archive this report"
+                    >
+                      <Archive size={18} />
+                      <span className="text-xs">Archive</span>
+                    </button>
                   </td>
                 </tr>
               ))}

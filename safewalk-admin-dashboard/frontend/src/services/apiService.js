@@ -86,4 +86,18 @@ export const apiService = {
     });
     return response.data;
   },
+
+  approveIncident: async (id) => {
+    const response = await axios.post(`${API_BASE_URL}/incidents/${id}/approve`, {}, {
+      headers: getAuthHeader(),
+    });
+    return response.data;
+  },
+
+  deleteIncident: async (id) => {
+    const response = await axios.delete(`${API_BASE_URL}/incidents/${id}`, {
+      headers: getAuthHeader(),
+    });
+    return response.data;
+  },
 };

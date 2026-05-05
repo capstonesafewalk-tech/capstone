@@ -123,4 +123,60 @@ router.get('/stats/summary', (req, res) => {
   }
 });
 
+// POST /incidents/:id/approve - Approve incident and convert to active crime
+router.post('/:id/approve', (req, res) => {
+  try {
+    const incident = incidents.find((i) => i.id === req.params.id);
+
+    if (!incident) {
+      return res.status(404).json({ error: 'Incident not found' });
+    }
+
+    // Mark incident as approved and remove from pending list
+    const approvedIncident = {
+      ...incident,
+      status: 'approved',
+      approvedAt: new Date().toISOString(),
+    };
+
+    // Remove from incidents array
+    incidents = incidents.filter((i) => i.id !== req.params.id);
+
+    console.log(`✅ Incident approved: ${incident.type} at ${incident.location}`);
+
+    res.json({
+      success: true,
+      message: 'Incident approved and moved to active crimes',
+      incident: approvedIncident,
+    });
+  } catch (error) {
+    console.error('Error approving incident:', error);
+    res.status(500).json({ error: 'Failed to approve incident' });
+  }
+});
+
+// DELETE /incidents/:id - Delete/archive an incident
+router.delete('/:id', (req, res) => {
+  try {
+    const incident = incidents.find((i) => i.id === req.params.id);
+
+    if (!incident) {
+      return res.status(404).json({ error: 'Incident not found' });
+    }
+
+    // Remove from incidents array
+    incidents = incidents.filter((i) => i.id !== req.params.id);
+
+    console.log(`✅ Incident archived: ${incident.type} at ${incident.location}`);
+
+    res.json({
+      success: true,
+      message: 'Incident archived',
+    });
+  } catch (error) {
+    console.error('Error archiving incident:', error);
+    res.status(500).json({ error: 'Failed to archive incident' });
+  }
+});
+
 module.exports = router;
