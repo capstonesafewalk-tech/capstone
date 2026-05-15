@@ -1,153 +1,101 @@
-import React, { useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity } from 'react-native';
+import React, { useMemo } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import AppButton from '../components/AppButton';
 import AppCard from '../components/AppCard';
 import { useAuth } from '../context/AuthContext';
-import { useToast } from '../components/Toast';
 import { useAppTheme } from '../theme/theme';
 
-// Mock data
-const MOCK_USERS = [
-  { id: '1', name: 'Juan Dela Cruz' },
-  { id: '2', name: 'Maria Santos' },
-  { id: '3', name: 'Pedro Reyes' }
+const SAFETY_TIPS = [
+  { icon: 'eye-outline', tip: 'Stay aware of your surroundings at all times.' },
+  { icon: 'walk-outline', tip: 'Stick to well-lit and populated paths, especially at night.' },
+  { icon: 'phone-portrait-outline', tip: 'Keep your phone charged and emergency contacts ready.' },
+  { icon: 'people-outline', tip: 'Walk with a companion when possible in unfamiliar areas.' },
+  { icon: 'alert-circle-outline', tip: 'Report suspicious activity immediately using the Report tab.' },
 ];
 
-const MOCK_FRIENDS = [
-  { id: '4', name: 'Ana Lopez' },
-  { id: '5', name: 'Mark Diaz' }
+const RISK_LEVELS = [
+  { label: 'Low Risk', color: '#10B981', icon: 'checkmark-circle-outline', desc: 'Area is generally safe. Stay alert.' },
+  { label: 'Moderate Risk', color: '#F59E0B', icon: 'warning-outline', desc: 'Some incidents reported nearby. Be cautious.' },
+  { label: 'High Risk', color: '#EF4444', icon: 'alert-circle', desc: 'Frequent incidents. Avoid if possible.' },
 ];
 
 export default function HomeScreen() {
   const { colors } = useAppTheme();
   const { user } = useAuth();
-  const toast = useToast();
-
-  const [searchInput, setSearchInput] = useState('');
-  const [selectedUsers, setSelectedUsers] = useState([]);
 
   const welcomeName = useMemo(() => user?.name || 'SAFEWALK User', [user]);
 
-  // Filter users based on search input
-  const filteredUsers = useMemo(() => {
-    if (!searchInput.trim()) return MOCK_USERS;
-    return MOCK_USERS.filter(u =>
-      u.name.toLowerCase().includes(searchInput.toLowerCase())
-    );
-  }, [searchInput]);
-
-  // Toggle user selection
-  const toggleUserSelection = (userId) => {
-    setSelectedUsers(prev =>
-      prev.includes(userId)
-        ? prev.filter(id => id !== userId)
-        : [...prev, userId]
-    );
-  };
-
-  // Handle create group
-  const handleCreateGroup = () => {
-    if (selectedUsers.length === 0) {
-      Alert.alert('No Users Selected', 'Select at least one user to create a group.');
-      return;
-    }
-    toast.show('Group created successfully!', 'success');
-    setSelectedUsers([]);
-    setSearchInput('');
-  };
-
-  // Render user item for Find Users
-  const renderUserItem = ({ item }) => {
-    const isSelected = selectedUsers.includes(item.id);
-    return (
-      <TouchableOpacity
-        onPress={() => toggleUserSelection(item.id)}
-        style={[
-          styles.userItem,
-          {
-            backgroundColor: isSelected ? colors.softBlue : colors.surface,
-            borderColor: isSelected ? colors.primary : colors.border
-          }
-        ]}
-      >
-        <View style={styles.userContent}>
-          <Text style={[styles.userName, { color: colors.text }]}>{item.name}</Text>
-        </View>
-        {isSelected && (
-          <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-        )}
-      </TouchableOpacity>
-    );
-  };
-
-  // Render friend item
-  const renderFriendItem = ({ item }) => {
-    return (
-      <AppCard style={[styles.friendItem, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.friendName, { color: colors.text }]}>{item.name}</Text>
-      </AppCard>
-    );
-  };
-
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View style={styles.container}>
-        {/* Header - KEPT UNCHANGED */}
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.kicker, { color: colors.primary }]}>Good Day</Text>
           <Text style={[styles.title, { color: colors.text }]}>Welcome, {welcomeName}.</Text>
-          <Text style={[styles.subtitle, { color: colors.muted }]}>Your live safety dashboard is active and updating nearby risk zones.</Text>
+          <Text style={[styles.subtitle, { color: colors.muted }]}>
+            Your live safety dashboard is active and updating nearby risk zones.
+          </Text>
         </View>
 
-        {/* Find Users Section */}
+        {/* Safety Overview Card */}
         <AppCard style={styles.sectionCard}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Find Users</Text>
-
-          <TextInput
-            style={[
-              styles.searchInput,
-              {
-                backgroundColor: colors.surface,
-                color: colors.text,
-                borderColor: colors.border
-              }
-            ]}
-            placeholder="Search users..."
-            placeholderTextColor={colors.muted}
-            value={searchInput}
-            onChangeText={setSearchInput}
-          />
-        </AppCard>
-
-        {/* Selected users count */}
-        {selectedUsers.length > 0 && (
-          <Text style={[styles.selectedCount, { color: colors.primary }]}>
-            {selectedUsers.length} {selectedUsers.length === 1 ? 'user' : 'users'} selected
+          <View style={styles.sectionHeader}>
+            <Ionicons name="shield-checkmark-outline" size={22} color={colors.primary} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Safety Overview</Text>
+          </View>
+          <Text style={[styles.sectionDesc, { color: colors.muted }]}>
+            Current incident risk levels in your area based on live reports.
           </Text>
-        )}
 
-        {/* Your Friends Section */}
-        <AppCard style={styles.sectionCard}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Friends</Text>
-
-          <FlatList
-            data={MOCK_FRIENDS}
-            keyExtractor={item => item.id}
-            renderItem={renderFriendItem}
-            scrollEnabled={false}
-            style={styles.friendsList}
-          />
+          {RISK_LEVELS.map((level) => (
+            <View
+              key={level.label}
+              style={[
+                styles.riskRow,
+                { backgroundColor: colors.surface, borderColor: colors.border }
+              ]}
+            >
+              <View style={[styles.riskDot, { backgroundColor: level.color + '22', borderColor: level.color }]}>
+                <Ionicons name={level.icon} size={18} color={level.color} />
+              </View>
+              <View style={styles.riskText}>
+                <Text style={[styles.riskLabel, { color: level.color }]}>{level.label}</Text>
+                <Text style={[styles.riskDesc, { color: colors.muted }]}>{level.desc}</Text>
+              </View>
+            </View>
+          ))}
         </AppCard>
 
-        {/* Create Group Button */}
-        <AppButton
-          title="Create Group"
-          onPress={handleCreateGroup}
-          style={styles.createButton}
-        />
-      </View>
+        {/* Safety Info Card */}
+        <AppCard style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="information-circle-outline" size={22} color={colors.primary} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Safety Info</Text>
+          </View>
+          <Text style={[styles.sectionDesc, { color: colors.muted }]}>
+            Follow these tips to stay safe while using SafeWalk.
+          </Text>
+
+          {SAFETY_TIPS.map((item, index) => (
+            <View
+              key={index}
+              style={[
+                styles.tipRow,
+                { borderColor: colors.border }
+              ]}
+            >
+              <View style={[styles.tipIcon, { backgroundColor: colors.softBlue || colors.surface }]}>
+                <Ionicons name={item.icon} size={18} color={colors.primary} />
+              </View>
+              <Text style={[styles.tipText, { color: colors.text }]}>{item.tip}</Text>
+            </View>
+          ))}
+        </AppCard>
+      </ScrollView>
     </View>
   );
 }
@@ -157,10 +105,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
-    flex: 1,
     paddingHorizontal: 18,
     paddingTop: 18,
-    paddingBottom: 24,
+    paddingBottom: 32,
   },
   header: {
     marginBottom: 24,
@@ -184,60 +131,70 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     marginBottom: 16,
+    paddingVertical: 18,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    marginBottom: 12,
-  },
-  searchInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  usersList: {
-    gap: 8,
-  },
-  userItem: {
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 6,
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  sectionDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  riskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 8,
+    gap: 12,
   },
-  userContent: {
+  riskDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  riskText: {
     flex: 1,
   },
-  userName: {
+  riskLabel: {
     fontSize: 14,
-    fontWeight: '600',
-  },
-  selectedCount: {
-    fontSize: 12,
     fontWeight: '700',
-    marginBottom: 8,
-    marginLeft: 4,
   },
-  friendsList: {
-    gap: 8,
+  riskDesc: {
+    fontSize: 12,
+    marginTop: 2,
   },
-  friendItem: {
+  tipRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderBottomWidth: 1,
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 8,
-    borderRadius: 8,
+    gap: 12,
   },
-  friendName: {
-    fontSize: 14,
-    fontWeight: '600',
+  tipIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  createButton: {
-    marginTop: 8,
+  tipText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    paddingTop: 7,
   },
 });

@@ -1,5 +1,7 @@
 import React, { createContext, useState, useCallback } from 'react';
-import axios from 'axios';
+import { auth, db } from '../services/firebaseConfig';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { collection, addDoc } from 'firebase/firestore';
 
 const AuthContext = createContext();
 
@@ -13,40 +15,63 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.post('http://localhost:5000/auth/login', {
-        email,
-        password,
-      });
-      const { token, admin } = response.data;
-      setToken(token);
-      setAdmin(admin);
-      localStorage.setItem('token', token);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Get token from Firebase
+      const idToken = await user.getIdToken();
+      
+      setToken(idToken);
+      setAdmin({ id: user.uid, email: user.email });
+      localStorage.setItem('token', idToken);
       return true;
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
+      if (err.code === 'auth/configuration-not-found') {
+        setError('Firebase Error: Email/Password authentication is not enabled in your Firebase Console.');
+      } else {
+        setError(err.message || 'Login failed');
+      }
       return false;
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const logout = useCallback(() => {
-    setToken(null);
-    setAdmin(null);
-    localStorage.removeItem('token');
+  const logout = useCallback(async () => {
+    setLoading(true);
+    try {
+      await signOut(auth);
+      setToken(null);
+      setAdmin(null);
+      localStorage.removeItem('token');
+    } catch (err) {
+      setError(err.message || 'Logout failed');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const register = useCallback(async (email, password) => {
     setLoading(true);
     setError(null);
     try {
-      await axios.post('http://localhost:5000/auth/register', {
-        email,
-        password,
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Store admin in Firestore
+      await addDoc(collection(db, 'admins'), {
+        uid: user.uid,
+        email: user.email,
+        createdAt: new Date(),
       });
+      
       return true;
     } catch (err) {
-      setError(err.response?.data?.error || 'Registration failed');
+      if (err.code === 'auth/configuration-not-found') {
+        setError('Firebase Error: Email/Password authentication is not enabled in your Firebase Console.');
+      } else {
+        setError(err.message || 'Registration failed');
+      }
       return false;
     } finally {
       setLoading(false);

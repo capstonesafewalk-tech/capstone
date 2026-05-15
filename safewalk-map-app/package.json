@@ -1,0 +1,20 @@
+{
+  "name": "safewalk-map-app",
+  "version": "1.0.0",
+  "description": "Modern mobile safety navigation application using MapLibre GL JS",
+  "main": "index.html",
+  "scripts": {
+    "start": "python -m http.server 8000",
+    "build": "echo 'Static site - no build needed'"
+  },
+  "keywords": [
+    "safety",
+    "navigation",
+    "maplibre",
+    "gps",
+    "geofencing",
+    "crime-reporting"
+  ],
+  "author": "",
+  "license": "ISC"
+}

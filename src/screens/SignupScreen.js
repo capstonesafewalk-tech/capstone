@@ -14,7 +14,9 @@ export default function SignupScreen({ navigation }) {
   const { signUp } = useAuth();
   const toast = useToast();
 
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
   const [password, setPassword] = useState('');
@@ -46,8 +48,8 @@ export default function SignupScreen({ navigation }) {
   };
 
   const handleSendAuthCode = async () => {
-    if (!fullName.trim() || !email.trim() || !mobileNumber.trim() || !password.trim() || !confirmPassword.trim()) {
-      Alert.alert('Missing information', 'Please fill in all fields.');
+    if (!firstName.trim() || !lastName.trim() || !email.trim() || !mobileNumber.trim() || !password.trim() || !confirmPassword.trim()) {
+      Alert.alert('Missing information', 'Please fill in all required fields.');
       return;
     }
 
@@ -94,7 +96,8 @@ export default function SignupScreen({ navigation }) {
       // Simulate code verification
       // In production, this would call an API to verify the code
       await new Promise(resolve => setTimeout(resolve, 1000));
-      await signUp({ fullName, email, mobileNumber, password });
+      const full = [firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(' ');
+      await signUp({ fullName: full, firstName, middleName, lastName, email, mobileNumber, password });
       toast.show('Account created successfully! Signing you in...', 'success');
       navigation.replace('Login');
     } catch (error) {
@@ -121,10 +124,28 @@ export default function SignupScreen({ navigation }) {
                 <Text style={[styles.sectionCopy, { color: colors.muted }]}>Set up your SAFEWALK profile in under a minute.</Text>
 
                 <AppInput
-                  label="Full Name"
-                  value={fullName}
-                  onChangeText={setFullName}
-                  placeholder="Enter your full name"
+                  label="First Name"
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  placeholder="Enter your first name"
+                  leftIcon={<Ionicons name="person-outline" size={18} color={colors.primary} />}
+                  editable={!loading}
+                />
+
+                <AppInput
+                  label="Middle Name (Optional)"
+                  value={middleName}
+                  onChangeText={setMiddleName}
+                  placeholder="Enter your middle name"
+                  leftIcon={<Ionicons name="person-outline" size={18} color={colors.primary} />}
+                  editable={!loading}
+                />
+
+                <AppInput
+                  label="Last Name"
+                  value={lastName}
+                  onChangeText={setLastName}
+                  placeholder="Enter your last name"
                   leftIcon={<Ionicons name="person-outline" size={18} color={colors.primary} />}
                   editable={!loading}
                 />

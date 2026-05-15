@@ -19,8 +19,9 @@ const INCIDENT_TYPES = [
 export default function ReportIncidentScreen() {
   const { colors } = useAppTheme();
   const toast = useToast();
-  
+
   const [selectedType, setSelectedType] = useState(null);
+  const [otherTypeText, setOtherTypeText] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [loading, setLoading] = useState(false);
@@ -60,6 +61,11 @@ export default function ReportIncidentScreen() {
       return;
     }
 
+    if (selectedType === 'other' && !otherTypeText.trim()) {
+      toast.show('Please specify the incident type', 'warning');
+      return;
+    }
+
     if (!description.trim()) {
       toast.show('Please describe the incident', 'warning');
       return;
@@ -75,7 +81,7 @@ export default function ReportIncidentScreen() {
 
     try {
       const incidentData = {
-        type: selectedType,
+        type: selectedType === 'other' ? (otherTypeText.trim() || 'Other') : selectedType,
         description: description.trim(),
         location: location,
         lat: gpsLocation?.lat || null,
@@ -96,10 +102,11 @@ export default function ReportIncidentScreen() {
       if (response.ok) {
         setShowSuccess(true);
         toast.show('Incident reported successfully! ✅', 'success');
-        
+
         // Reset form
         setTimeout(() => {
           setSelectedType(null);
+          setOtherTypeText('');
           setDescription('');
           setShowSuccess(false);
         }, 2000);
@@ -111,12 +118,13 @@ export default function ReportIncidentScreen() {
       // Allow offline reporting (mock success)
       setShowSuccess(true);
       toast.show('Report submitted! (Offline mode)', 'success');
-      
+
       setTimeout(() => {
-        setSelectedType(null);
-        setDescription('');
-        setShowSuccess(false);
-      }, 2000);
+          setSelectedType(null);
+          setOtherTypeText('');
+          setDescription('');
+          setShowSuccess(false);
+        }, 2000);
     } finally {
       setLoading(false);
     }
@@ -179,6 +187,23 @@ export default function ReportIncidentScreen() {
             </View>
           ))}
         </View>
+
+        {/* Custom type input when "Other" is selected */}
+        {selectedType === 'other' && (
+          <View style={{ marginBottom: 16 }}>
+            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 8 }]}>
+              Specify Incident Type
+            </Text>
+            <AppInput
+              placeholder="e.g. Flooding, Fire, Lost Item..."
+              value={otherTypeText}
+              onChangeText={setOtherTypeText}
+              placeholderTextColor={colors.muted}
+              editable={!loading}
+              style={{ marginBottom: 0 }}
+            />
+          </View>
+        )}
 
         {/* Description Input */}
         <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 24 }]}>Details</Text>

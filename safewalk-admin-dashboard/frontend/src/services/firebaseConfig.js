@@ -1,5 +1,6 @@
-const admin = require('firebase-admin');
-require('dotenv').config();
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAUbtoBgI9k3s7GpNBKtN0YGD-OqWJfOVs",
@@ -10,10 +11,9 @@ const firebaseConfig = {
   appId: "1:1003443990353:web:c9653ce6140954fa062d70"
 };
 
-admin.initializeApp({
-  projectId: firebaseConfig.projectId,
-});
+const app = initializeApp(firebaseConfig);
 
-const db = admin.firestore();
+export const auth = getAuth(app);
+export const db = getFirestore(app);
 
-module.exports = { db, admin };
+export default app;

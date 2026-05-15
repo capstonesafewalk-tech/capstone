@@ -19,7 +19,7 @@ function getInitials(name = '') {
 }
 
 export default function ProfileScreen() {
-  const { colors } = useAppTheme();
+  const { colors, themeOverride, setThemeOverride } = useAppTheme();
   const { user, signOut } = useAuth();
   const toast = useToast();
 
@@ -36,6 +36,25 @@ export default function ProfileScreen() {
     toast.show('You have been signed out.', 'info');
   };
 
+  const handleThemeToggle = () => {
+    if (themeOverride === 'light') {
+      setThemeOverride('dark');
+      toast.show('Switched to Dark Mode', 'success');
+    } else if (themeOverride === 'dark') {
+      setThemeOverride(null);
+      toast.show('Switched to System Theme', 'success');
+    } else {
+      setThemeOverride('light');
+      toast.show('Switched to Light Mode', 'success');
+    }
+  };
+
+  const getThemeIcon = () => {
+    if (themeOverride === 'light') return 'sunny-outline';
+    if (themeOverride === 'dark') return 'moon-outline';
+    return 'contrast-outline'; // System mode icon
+  };
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -50,6 +69,13 @@ export default function ProfileScreen() {
             <TouchableOpacity onPress={handleSettings} style={[styles.iconButton, { borderColor: colors.border, backgroundColor: colors.surface }]}>
               <Ionicons name="settings-outline" size={18} color={colors.primary} />
               <Text style={[styles.iconButtonText, { color: colors.primary }]}>Settings</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity onPress={handleThemeToggle} style={[styles.iconButton, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              <Ionicons name={getThemeIcon()} size={18} color={colors.primary} />
+              <Text style={[styles.iconButtonText, { color: colors.primary }]}>
+                {themeOverride ? (themeOverride === 'light' ? 'Light' : 'Dark') : 'System'}
+              </Text>
             </TouchableOpacity>
           </View>
         </AppCard>

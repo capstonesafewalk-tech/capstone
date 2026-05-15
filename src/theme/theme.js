@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 import { useColorScheme } from 'react-native';
 import { DarkTheme, DefaultTheme } from '@react-navigation/native';
 
@@ -54,17 +54,21 @@ const ThemeContext = createContext({
 });
 
 export function AppThemeProvider({ children }) {
-  const scheme = useColorScheme();
+  const systemScheme = useColorScheme();
+  const [themeOverride, setThemeOverride] = useState(null);
 
   const value = useMemo(() => {
-    const isDark = scheme === 'dark';
+    const activeScheme = themeOverride || systemScheme || 'light';
+    const isDark = activeScheme === 'dark';
     const colors = isDark ? darkColors : lightColors;
     const baseTheme = isDark ? DarkTheme : DefaultTheme;
 
     return {
-      scheme: isDark ? 'dark' : 'light',
+      scheme: activeScheme,
       isDark,
       colors,
+      themeOverride,
+      setThemeOverride,
       navigationTheme: {
         ...baseTheme,
         colors: {
@@ -78,7 +82,7 @@ export function AppThemeProvider({ children }) {
         },
       },
     };
-  }, [scheme]);
+  }, [systemScheme, themeOverride]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

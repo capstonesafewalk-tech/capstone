@@ -1,14 +1,22 @@
-const pool = require('../config/database');
+const { db } = require('../config/database');
 
 class AdminModel {
   static async findByEmail(email) {
-    const [rows] = await pool.query('SELECT * FROM admins WHERE email = ?', [email]);
-    return rows[0];
+    const snapshot = await db.collection('admins').where('email', '==', email).get();
+    if (snapshot.empty) {
+      return null;
+    }
+    const doc = snapshot.docs[0];
+    return { id: doc.id, ...doc.data() };
   }
 
   static async create(email, hashedPassword) {
-    const [result] = await pool.query('INSERT INTO admins (email, password) VALUES (?, ?)', [email, hashedPassword]);
-    return result;
+    const docRef = await db.collection('admins').add({
+      email,
+      password: hashedPassword,
+      createdAt: new Date()
+    });
+    return { id: docRef.id };
   }
 }
 

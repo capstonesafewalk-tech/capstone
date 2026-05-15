@@ -1,79 +1,116 @@
-const pool = require('../config/database');
+const { db } = require('../config/database');
 
 class CrimeModel {
   static async getActiveCrimes() {
-    const [rows] = await pool.query('SELECT * FROM crimes WHERE status = "active" ORDER BY timestamp DESC');
-    return rows;
+    const snapshot = await db.collection('crimes')
+      .where('status', '==', 'active')
+      .orderBy('timestamp', 'desc')
+      .get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
 
   static async getAllCrimes() {
-    const [rows] = await pool.query('SELECT * FROM crimes ORDER BY timestamp DESC');
-    return rows;
+    const snapshot = await db.collection('crimes')
+      .orderBy('timestamp', 'desc')
+      .get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
 
   static async getArchivedCrimes() {
-    const [rows] = await pool.query('SELECT * FROM crimes WHERE status = "archived" ORDER BY timestamp DESC');
-    return rows;
+    const snapshot = await db.collection('crimes')
+      .where('status', '==', 'archived')
+      .orderBy('timestamp', 'desc')
+      .get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
 
   static async create(latitude, longitude, crimeType, timestamp) {
-    const [result] = await pool.query(
-      'INSERT INTO crimes (latitude, longitude, crime_type, timestamp, status) VALUES (?, ?, ?, ?, "active")',
-      [latitude, longitude, crimeType, timestamp]
-    );
-    return result;
+    const docRef = await db.collection('crimes').add({
+      latitude,
+      longitude,
+      crime_type: crimeType,
+      timestamp,
+      status: 'active',
+      createdAt: new Date()
+    });
+    return { insertId: docRef.id };
   }
 
   static async update(id, latitude, longitude, crimeType, timestamp) {
-    const [result] = await pool.query(
-      'UPDATE crimes SET latitude = ?, longitude = ?, crime_type = ?, timestamp = ? WHERE id = ?',
-      [latitude, longitude, crimeType, timestamp, id]
-    );
-    return result;
+    await db.collection('crimes').doc(id).update({
+      latitude,
+      longitude,
+      crime_type: crimeType,
+      timestamp,
+      updatedAt: new Date()
+    });
+    return { affectedRows: 1 };
   }
 
   static async archive(id) {
-    const [result] = await pool.query('UPDATE crimes SET status = "archived" WHERE id = ?', [id]);
-    return result;
+    await db.collection('crimes').doc(id).update({
+      status: 'archived',
+      updatedAt: new Date()
+    });
+    return { affectedRows: 1 };
   }
 
   static async restore(id) {
-    const [result] = await pool.query('UPDATE crimes SET status = "active" WHERE id = ?', [id]);
-    return result;
+    await db.collection('crimes').doc(id).update({
+      status: 'active',
+      updatedAt: new Date()
+    });
+    return { affectedRows: 1 };
   }
 
   static async getById(id) {
-    const [rows] = await pool.query('SELECT * FROM crimes WHERE id = ?', [id]);
-    return rows[0];
+    const doc = await db.collection('crimes').doc(id).get();
+    if (!doc.exists) {
+      return null;
+    }
+    return { id: doc.id, ...doc.data() };
   }
 
   static async getStatistics() {
-    const [activeCrimes] = await pool.query('SELECT COUNT(*) as count FROM crimes WHERE status = "active"');
-    const [archivedCrimes] = await pool.query('SELECT COUNT(*) as count FROM crimes WHERE status = "archived"');
+    const activeSnapshot = await db.collection('crimes')
+      .where('status', '==', 'active')
+      .get();
+    const archivedSnapshot = await db.collection('crimes')
+      .where('status', '==', 'archived')
+      .get();
     return {
-      activeCrimes: activeCrimes[0].count,
-      archivedCrimes: archivedCrimes[0].count,
+      activeCrimes: activeSnapshot.size,
+      archivedCrimes: archivedSnapshot.size,
     };
   }
 
   static async getHighRiskAreas() {
-    const [rows] = await pool.query(`
-      SELECT latitude, longitude, COUNT(*) as crime_count
-      FROM crimes
-      WHERE status = "active"
-      GROUP BY latitude, longitude
-      HAVING COUNT(*) >= 10
-      ORDER BY crime_count DESC
-    `);
-    return rows;
+    const snapshot = await db.collection('crimes')
+      .where('status', '==', 'active')
+      .get();
+
+    const locationMap = {};
+    snapshot.docs.forEach(doc => {
+      const data = doc.data();
+      const key = `${data.latitude},${data.longitude}`;
+      if (!locationMap[key]) {
+        locationMap[key] = { latitude: data.latitude, longitude: data.longitude, crime_count: 0 };
+      }
+      locationMap[key].crime_count++;
+    });
+
+    return Object.values(locationMap)
+      .filter(area => area.crime_count >= 10)
+      .sort((a, b) => b.crime_count - a.crime_count);
   }
 
   static async getRecentCrimes(limit = 10) {
-    const [rows] = await pool.query(
-      'SELECT * FROM crimes WHERE status = "active" ORDER BY timestamp DESC LIMIT ?',
-      [limit]
-    );
-    return rows;
+    const snapshot = await db.collection('crimes')
+      .where('status', '==', 'active')
+      .orderBy('timestamp', 'desc')
+      .limit(limit)
+      .get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
 }
 
