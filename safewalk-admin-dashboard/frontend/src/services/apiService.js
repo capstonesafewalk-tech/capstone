@@ -1,6 +1,20 @@
 import { db } from './firebaseConfig';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, deleteDoc, orderBy } from 'firebase/firestore';
 
+const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+const callBackend = async (path, method = 'GET', body = null) => {
+  const token = localStorage.getItem('token');
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(`${BACKEND_URL}${path}`, opts);
+  if (!res.ok) { const err = await res.json().catch(() => ({ error: res.statusText })); throw new Error(err.error || 'Request failed'); }
+  return res.json();
+};
+
 export const apiService = {
   // Crime endpoints
   getCrimes: async () => {
@@ -91,11 +105,36 @@ export const apiService = {
     return { message: 'Crime report restored' };
   },
 
+  // Permanently delete a crime (Super Admin only)
+  deleteCrime: async (id) => {
+    await deleteDoc(doc(db, 'crimes', id));
+    return { message: 'Crime report permanently deleted' };
+  },
+
   // Incident endpoints
   getIncidents: async () => {
-    const q = query(collection(db, 'incidents'), orderBy('timestamp', 'desc'));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // Try ordering by createdAt (Firestore server timestamp from mobile app);
+    // fall back to all docs sorted client-side if index is missing
+    try {
+      const q = query(
+        collection(db, 'incidents'),
+        where('status', 'in', ['pending', 'under_review']),
+        orderBy('createdAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (_) {
+      // Fallback: get all incidents, sort client-side
+      const querySnapshot = await getDocs(collection(db, 'incidents'));
+      const docs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      return docs
+        .filter(d => !d.status || d.status === 'pending' || d.status === 'under_review')
+        .sort((a, b) => {
+          const tA = a.createdAt?.toDate?.() || new Date(a.timestamp || 0);
+          const tB = b.createdAt?.toDate?.() || new Date(b.timestamp || 0);
+          return tB - tA;
+        });
+    }
   },
 
   getIncidentById: async (id) => {
@@ -124,4 +163,9 @@ export const apiService = {
     await deleteDoc(doc(db, 'incidents', id));
     return { message: 'Incident deleted' };
   },
+
+  // ── Super Admin — Brgy User Management (via backend) ──
+  getBrgyUsers: () => callBackend('/super-admin/users', 'GET'),
+  createBrgyUser: (email, password, brgyName) => callBackend('/super-admin/users', 'POST', { email, password, brgyName }),
+  deleteBrgyUser: (uid) => callBackend(`/super-admin/users/${uid}`, 'DELETE'),
 };

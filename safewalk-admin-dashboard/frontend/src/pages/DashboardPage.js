@@ -1,36 +1,42 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { apiService } from '../services/apiService';
-import { AlertCircle, MapPin, TrendingUp, CheckCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { AlertCircle, MapPin, CheckCircle, Shield } from 'lucide-react';
 
-const TYPE_COLORS = {
-  theft: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/20',
-  robbery: 'bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-500/20',
-  assault: 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/20',
-  burglary: 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-500/20',
-  harassment: 'bg-pink-50 dark:bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-200 dark:border-pink-500/20',
-  vandalism: 'bg-yellow-50 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-500/20',
-  'drug-related incident': 'bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/20',
-  kidnapping: 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/20',
-  'sexual harassment': 'bg-fuchsia-50 dark:bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-500/20',
-  'physical altercation': 'bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-500/20',
-  'suspicious activity': 'bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-500/20',
-  suspicious: 'bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-500/20',
-  accident: 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-500/20',
-  other: 'bg-slate-50 dark:bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-500/20',
-};
+// ── Single source of truth for incident types (matches mobile app) ──
+const INCIDENT_TYPES = [
+  { value: 'Theft',               label: 'Theft',               color: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/20' },
+  { value: 'Robbery',             label: 'Robbery',             color: 'bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-500/20' },
+  { value: 'Harassment',          label: 'Harassment',          color: 'bg-pink-50 dark:bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-200 dark:border-pink-500/20' },
+  { value: 'Accident',            label: 'Accident',            color: 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-500/20' },
+  { value: 'Suspicious Activity', label: 'Suspicious Activity', color: 'bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-500/20' },
+  { value: 'Other',               label: 'Other',               color: 'bg-slate-50 dark:bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-500/20' },
+];
+
+const TYPE_MAP = Object.fromEntries(INCIDENT_TYPES.map(t => [t.value.toLowerCase(), t]));
 
 const getTypeBadge = (rawType) => {
-  if (!rawType) return { label: 'Unknown', cls: TYPE_COLORS.other };
-  const key = rawType.toLowerCase();
+  if (!rawType) return { label: 'Unknown', cls: INCIDENT_TYPES[5].color };
+  const match = TYPE_MAP[rawType.toLowerCase()];
+  if (match) return { label: match.label, cls: match.color };
   const label = rawType.charAt(0).toUpperCase() + rawType.slice(1);
-  return { label, cls: TYPE_COLORS[key] || TYPE_COLORS.other };
+  return { label, cls: INCIDENT_TYPES[5].color };
 };
 const DashboardPage = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [crimes, setCrimes] = useState([]);
+  const [pendingReports, setPendingReports] = useState(0);
+  const { admin } = useAuth();
+
+  // Derive BRGY display name from admin email (mirrors mobile HomeScreen)
+  const brgyName = useMemo(() => {
+    if (!admin?.email) return 'ISROUTE';
+    const prefix = admin.email.split('@')[0];
+    return prefix ? prefix.charAt(0).toUpperCase() + prefix.slice(1) : 'ISROUTE';
+  }, [admin]);
 
   useEffect(() => {
     fetchData();
@@ -39,13 +45,16 @@ const DashboardPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [statisticsData, crimesData] = await Promise.all([
+      const [statisticsData, crimesData, incidentsData] = await Promise.all([
         apiService.getStatistics(),
-        apiService.getCrimes()
+        apiService.getCrimes(),
+        apiService.getIncidents().catch(() => []),
       ]);
 
       setStats(statisticsData);
       setCrimes(crimesData);
+      const incArr = Array.isArray(incidentsData) ? incidentsData : (incidentsData.incidents || []);
+      setPendingReports(incArr.filter(i => !i.status || i.status === 'pending').length);
       setError(null);
     } catch (err) {
       console.error('Data fetch error:', err);
@@ -108,8 +117,20 @@ const DashboardPage = () => {
 
   return (
     <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Dashboard <span className="text-primary-600 dark:text-primary-500 font-light">Overview</span></h1>
+
+      {/* ── Hero Greeting — mirrors mobile HomeScreen "Good Day / Welcome, Name" ── */}
+      <div className="mb-8">
+        <p className="text-xs font-bold tracking-widest uppercase text-primary-600 dark:text-primary-400 mb-1">Good Day</p>
+        <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight">
+          BRGY. <span className="text-primary-600 dark:text-primary-400 font-light">{brgyName}</span>
+        </h1>
+        <p className="text-slate-500 dark:text-gray-400 text-sm mt-2">
+          Your live safety dashboard is active and updating nearby risk zones.
+        </p>
+      </div>
+
+      {/* Refresh button row */}
+      <div className="flex justify-end mb-6">
         <button
           onClick={fetchData}
           className="px-4 py-2 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-all text-sm font-medium flex items-center gap-2 group shadow-sm dark:shadow-none"
@@ -162,15 +183,21 @@ const DashboardPage = () => {
           </div>
         </div>
 
-        <div className="glass-card p-6 border-t-4 border-t-emerald-500 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl group-hover:bg-emerald-500/20 transition-all duration-500"></div>
+        <div className="glass-card p-6 border-t-4 border-t-violet-500 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-violet-500/10 rounded-full blur-3xl group-hover:bg-violet-500/20 transition-all duration-500"></div>
           <div className="flex items-center justify-between relative z-10">
             <div>
-              <p className="text-slate-500 dark:text-gray-400 text-sm font-medium uppercase tracking-wider mb-1">Total Reports</p>
-              <p className="text-4xl font-bold text-slate-900 dark:text-white mt-1">{(stats?.activeCrimes || 0) + (stats?.archivedCrimes || 0)}</p>
+              <p className="text-slate-500 dark:text-gray-400 text-sm font-medium uppercase tracking-wider mb-1">User Reports</p>
+              <p className="text-4xl font-bold text-slate-900 dark:text-white mt-1">{pendingReports}</p>
+              <p className="text-xs text-violet-600 dark:text-violet-400 mt-1 font-medium">Pending Review</p>
             </div>
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-500/20 rounded-2xl text-emerald-600 dark:text-emerald-400">
-              <TrendingUp size={32} />
+            <div className="p-3 bg-violet-50 dark:bg-violet-500/20 rounded-2xl text-violet-600 dark:text-violet-400 relative">
+              <Shield size={32} />
+              {pendingReports > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold animate-pulse">
+                  {pendingReports > 9 ? '9+' : pendingReports}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -273,20 +300,30 @@ const DashboardPage = () => {
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-white/5">
               {crimes && crimes.length > 0 ? (
-                crimes.slice(0, 10).map((crime, idx) => (
+                [...crimes]
+                  .sort((a, b) => {
+                    const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                    const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                    return tB - tA;
+                  })
+                  .slice(0, 10)
+                  .map((crime, idx) => (
                   <tr key={crime.id || idx} className="hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors group">
                     <td className="p-4 text-sm font-medium text-slate-700 dark:text-gray-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{crime.id?.substring(0, 8) || idx + 1}</td>
                     <td className="p-4 text-sm">
                       {(() => {
-                        const { label, cls } = getTypeBadge(crime.crime_type); return (
+                        const rawType = crime.crime_type || crime.crimeType || crime.type;
+                        const { label, cls } = getTypeBadge(rawType); return (
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${cls}`}>{label}</span>
                         );
                       })()}
                     </td>
-                    <td className="p-4 text-sm text-slate-600 dark:text-gray-400 font-mono">
-                      {crime.latitude && crime.longitude
-                        ? `${parseFloat(crime.latitude).toFixed(4)}, ${parseFloat(crime.longitude).toFixed(4)}`
-                        : 'N/A'}
+                    <td className="p-4 text-sm text-slate-600 dark:text-gray-400 max-w-xs">
+                      {crime.location
+                        ? <span className="truncate block" title={crime.location}>{crime.location}</span>
+                        : crime.latitude && crime.longitude
+                          ? <span className="font-mono text-xs">{parseFloat(crime.latitude).toFixed(4)}, {parseFloat(crime.longitude).toFixed(4)}</span>
+                          : 'N/A'}
                     </td>
                     <td className="p-4 text-sm text-slate-600 dark:text-gray-400">
                       {crime.timestamp

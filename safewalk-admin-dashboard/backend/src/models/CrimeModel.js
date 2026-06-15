@@ -24,10 +24,11 @@ class CrimeModel {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
 
-  static async create(latitude, longitude, crimeType, timestamp) {
+  static async create(latitude, longitude, crimeType, timestamp, location) {
     const docRef = await db.collection('crimes').add({
       latitude,
       longitude,
+      location: location || '',
       crime_type: crimeType,
       timestamp,
       status: 'active',
@@ -36,10 +37,11 @@ class CrimeModel {
     return { insertId: docRef.id };
   }
 
-  static async update(id, latitude, longitude, crimeType, timestamp) {
+  static async update(id, latitude, longitude, crimeType, timestamp, location) {
     await db.collection('crimes').doc(id).update({
       latitude,
       longitude,
+      location: location || '',
       crime_type: crimeType,
       timestamp,
       updatedAt: new Date()

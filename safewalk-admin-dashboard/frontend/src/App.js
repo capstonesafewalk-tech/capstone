@@ -3,11 +3,13 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import PrivateRoute from './components/PrivateRoute';
+import SuperAdminRoute from './components/SuperAdminRoute';
 import Sidebar from './components/Sidebar';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import CrimeManagementPage from './pages/CrimeManagementPage';
 import MapViewPage from './pages/MapViewPage';
+import SuperAdminPage from './pages/SuperAdminPage';
 import './App.css';
 
 function App() {
@@ -61,6 +63,20 @@ function App() {
           />
 
           <Route path="/" element={<Navigate to="/dashboard" />} />
+
+          <Route
+            path="/super-admin"
+            element={
+              <SuperAdminRoute>
+                <div className="flex">
+                  <Sidebar />
+                  <div className="flex-1 bg-transparent min-h-screen overflow-y-auto">
+                    <SuperAdminPage />
+                  </div>
+                </div>
+              </SuperAdminRoute>
+            }
+          />
         </Routes>
       </Router>
       </AuthProvider>

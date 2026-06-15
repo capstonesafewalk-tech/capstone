@@ -10,10 +10,55 @@ const firebaseConfig = {
   appId: "1:1003443990353:web:c9653ce6140954fa062d70"
 };
 
-admin.initializeApp({
-  projectId: firebaseConfig.projectId,
-});
+let db = null;
+let adminAuth = null;
 
-const db = admin.firestore();
+try {
+  if (process.env.FIREBASE_CREDENTIALS) {
+    const credentials = JSON.parse(process.env.FIREBASE_CREDENTIALS);
+    admin.initializeApp({
+      credential: admin.credential.cert(credentials),
+      projectId: firebaseConfig.projectId,
+    });
+  } else {
+    // Use default credentials or skip Firebase
+    try {
+      admin.initializeApp({
+        projectId: firebaseConfig.projectId,
+      });
+    } catch (e) {
+      console.warn('Firebase Admin SDK initialization skipped - credentials not available');
+    }
+  }
+  
+  db = admin.firestore();
+  adminAuth = admin.auth();
+} catch (error) {
+  console.warn('Firebase initialization failed:', error.message);
+  console.log('Running in offline mode - Firebase features will be unavailable');
+}
 
-module.exports = { db, admin };
+// Mock implementations for development
+const mockDb = {
+  collection: () => ({
+    add: () => Promise.resolve({ id: 'mock-id' }),
+    where: () => ({
+      get: () => Promise.resolve({ docs: [] })
+    }),
+    doc: () => ({
+      get: () => Promise.resolve({ data: () => ({}) }),
+      delete: () => Promise.resolve()
+    })
+  })
+};
+
+const mockAuth = {
+  createUser: ({ email, password }) => Promise.resolve({ uid: 'mock-uid', email }),
+  deleteUser: () => Promise.resolve(),
+  getUser: () => Promise.resolve({ uid: 'mock-uid' })
+};
+
+module.exports = { 
+  db: db || mockDb,
+  admin: { auth: () => adminAuth || mockAuth, ...admin }
+};

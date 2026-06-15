@@ -1,11 +1,43 @@
 const express = require('express');
 const router = express.Router();
+const { db } = require('../config/database');
+const path = require('path');
+const fs = require('fs');
+
+const uploadsDir = path.join(__dirname, '../../../uploads');
+
+// POST /incidents/upload-photo — accepts base64 image, saves to disk, returns URL
+router.post('/upload-photo', async (req, res) => {
+  try {
+    const { base64, mimeType } = req.body;
+    if (!base64) return res.status(400).json({ error: 'No image data provided' });
+
+    const ext = (mimeType || 'image/jpeg').includes('png') ? 'png' : 'jpg';
+    const filename = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const filePath = path.join(uploadsDir, filename);
+
+    // Ensure directory exists
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+    // Strip data URL prefix if present and write to disk
+    const data = base64.replace(/^data:image\/\w+;base64,/, '');
+    fs.writeFileSync(filePath, Buffer.from(data, 'base64'));
+
+    const PORT = process.env.PORT || 5000;
+    const url = `http://localhost:${PORT}/uploads/${filename}`;
+    console.log(`📸 Photo saved: ${filename}`);
+    res.json({ url });
+  } catch (error) {
+    console.error('Photo upload error:', error);
+    res.status(500).json({ error: 'Failed to save photo' });
+  }
+});
 
 // Store incidents in memory (for demo purposes - in production use database)
 let incidents = [];
 
 // POST /incidents/report - Submit a new incident report
-router.post('/report', (req, res) => {
+router.post('/report', async (req, res) => {
   try {
     const { type, description, location, lat, lng, timestamp, accuracy } = req.body;
 
@@ -28,6 +60,14 @@ router.post('/report', (req, res) => {
     };
 
     incidents.unshift(incident); // Add to beginning of array
+
+    // Save to Firebase Firestore
+    try {
+      await db.collection('incidents').add(incident);
+      console.log(`✅ Incident saved to Firestore: ${type} at ${location}`);
+    } catch (firestoreError) {
+      console.warn('⚠️ Could not save to Firestore, stored in memory:', firestoreError.message);
+    }
 
     console.log(`✅ Incident reported: ${type} at ${location}`);
 
@@ -72,7 +112,7 @@ router.get('/:id', (req, res) => {
 });
 
 // PATCH /incidents/:id - Update incident status (admin endpoint)
-router.patch('/:id', (req, res) => {
+router.patch('/:id', async (req, res) => {
   try {
     const { status } = req.body;
     const incident = incidents.find((i) => i.id === req.params.id);
@@ -83,6 +123,23 @@ router.patch('/:id', (req, res) => {
 
     incident.status = status || incident.status;
     incident.updatedAt = new Date().toISOString();
+
+    // Update in Firestore
+    try {
+      const firestoreQuery = await db.collection('incidents')
+        .where('id', '==', incident.id)
+        .get();
+      
+      if (!firestoreQuery.empty) {
+        await firestoreQuery.docs[0].ref.update({
+          status: incident.status,
+          updatedAt: incident.updatedAt
+        });
+        console.log(`✅ Incident updated in Firestore: ${incident.id}`);
+      }
+    } catch (firestoreError) {
+      console.warn('⚠️ Could not update Firestore:', firestoreError.message);
+    }
 
     res.json({
       success: true,

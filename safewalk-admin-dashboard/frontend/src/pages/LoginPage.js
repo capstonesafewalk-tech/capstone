@@ -24,9 +24,9 @@ const LoginPage = () => {
 
       <div className="glass-card p-10 w-[26rem] relative z-10">
         <div className="text-center mb-10">
-          <img src="/logo.png" alt="SafeWalk Logo" className="w-24 h-24 object-contain mx-auto mb-4" />
-          <h1 className="text-4xl font-bold text-gradient mb-2 tracking-tight">SAFEWALK</h1>
-          <p className="text-slate-500 dark:text-gray-400 text-sm">Secure Admin Portal</p>
+          <img src="/logo.png" alt="ISROUTE Logo" className="w-24 h-24 object-contain mx-auto mb-4" />
+          <h1 className="text-4xl font-bold text-gradient mb-2 tracking-tight">ISROUTE</h1>
+          <p className="text-slate-500 dark:text-gray-400 text-sm">Brgy User Portal</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
@@ -37,7 +37,7 @@ const LoginPage = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 bg-slate-50/50 dark:bg-dark-900/50 border border-slate-300 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-gray-500 transition-all"
-              placeholder="admin@safewalk.com"
+              placeholder="brgy@isroute.com"
               required
             />
           </div>

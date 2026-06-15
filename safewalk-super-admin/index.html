@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SafeWalk — Super Admin</title>
+<link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="loginScreen" class="screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="logo.png" alt="SafeWalk Logo"/>
+    </div>
+    <h1 class="login-title"><span>SAFEWALK</span></h1>
+    <p class="login-subtitle">Super Admin Portal</p>
+    <form id="loginForm">
+      <div class="field">
+        <label>Email Address</label>
+        <input type="email" id="loginEmail" placeholder="DILG@safewalk.com" required/>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="Enter password" required/>
+      </div>
+      <div id="loginError" class="error-box hidden"></div>
+      <button type="submit" id="loginBtn" class="btn-primary">Sign In to Super Admin</button>
+    </form>
+  </div>
+</div>
+
+<!-- DASHBOARD SCREEN -->
+<div id="dashScreen" class="screen hidden">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <img src="logo.png" alt="Logo" class="sidebar-logo-img"/>
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-name">SAFE<span>WALK</span></div>
+        <div class="sidebar-brand-sub">Super Admin</div>
+      </div>
+    </div>
+    <nav>
+      <div class="nav-section-label">Management</div>
+      <a href="#" class="nav-item active" data-tab="users">
+        <span class="nav-icon">👥</span> Brgy Users
+      </a>
+      <a href="#" class="nav-item" data-tab="incidents">
+        <span class="nav-icon">⚠️</span> All Incidents
+      </a>
+      <a href="#" class="nav-item" data-tab="reports">
+        <span class="nav-icon">📋</span> All Reports
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <button id="themeBtn" class="btn-theme">🌙 Dark Mode</button>
+      <button id="logoutBtn" class="btn-logout">🚪 Sign Out</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- Delete Confirm Modal -->
+    <div id="modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-icon">🗑️</div>
+        <h3>Confirm Deletion</h3>
+        <p>This action is <strong>permanent</strong> and cannot be undone. Are you sure?</p>
+        <div class="modal-btns">
+          <button id="modalCancel" class="btn-secondary">Cancel</button>
+          <button id="modalConfirm" class="btn-danger">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- USERS TAB -->
+    <div id="tab-users" class="tab-content">
+      <div class="page-header">
+        <div>
+          <p class="page-label">Master Control</p>
+          <h1 class="page-title">Brgy <span>Users</span></h1>
+        </div>
+        <button id="showCreateForm" class="btn-primary" style="width:auto;padding:11px 20px;font-size:13px">➕ Create Account</button>
+      </div>
+      <div id="createForm" class="card form-card hidden">
+        <h2>New Barangay User Account</h2>
+        <div class="form-grid">
+          <div class="field">
+            <label>Barangay Name</label>
+            <input type="text" id="newBrgyName" placeholder="e.g. Brgy. Rizal"/>
+          </div>
+          <div class="field">
+            <label>Email</label>
+            <input type="email" id="newEmail" placeholder="brgy@safewalk.com"/>
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input type="password" id="newPassword" placeholder="Min. 6 characters" minlength="6"/>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button id="createUserBtn" class="btn-primary">Create Account</button>
+          <button id="cancelCreate" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h2>Barangay Accounts <span class="count" id="usersCount"></span></h2>
+        </div>
+        <div id="usersTable"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- INCIDENTS TAB -->
+    <div id="tab-incidents" class="tab-content hidden">
+      <div class="page-header">
+        <div>
+          <p class="page-label">Master Control</p>
+          <h1 class="page-title">All <span>Incidents</span></h1>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h2>Verified Incidents <span class="count" id="incidentsCount"></span></h2>
+        </div>
+        <div id="incidentsTable"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- REPORTS TAB -->
+    <div id="tab-reports" class="tab-content hidden">
+      <div class="page-header">
+        <div>
+          <p class="page-label">Master Control</p>
+          <h1 class="page-title">All <span>Reports</span></h1>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h2>User Reports <span class="count" id="reportsCount"></span></h2>
+        </div>
+        <div id="reportsTable"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

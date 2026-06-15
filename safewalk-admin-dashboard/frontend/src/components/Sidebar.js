@@ -2,10 +2,20 @@ import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { LogOut, BarChart3, MapPin, Briefcase, Sun, Moon } from 'lucide-react';
+import { LogOut, BarChart3, MapPin, Briefcase, Sun, Moon, Shield } from 'lucide-react';
+
+// Derive a short display name from the admin email
+const getBrgyName = (admin) => {
+  if (!admin) return 'ISROUTE';
+  // Use email prefix before the @, capitalize first letter
+  const prefix = (admin.email || '').split('@')[0];
+  return prefix
+    ? prefix.charAt(0).toUpperCase() + prefix.slice(1)
+    : 'ISROUTE';
+};
 
 const Sidebar = () => {
-  const { logout } = useAuth();
+  const { logout, admin, isSuperAdmin } = useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -22,10 +32,13 @@ const Sidebar = () => {
       <div className="p-6 border-b border-slate-200 dark:border-white/10 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary-500 to-accent-500"></div>
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="SafeWalk Logo" className="w-10 h-10 object-contain rounded-lg" />
+          <img src="/logo.png" alt="IsRoute Logo" className="w-10 h-10 object-contain rounded-lg" />
           <div>
-            <h1 className="text-xl font-bold text-gradient leading-tight">SAFEWALK</h1>
-            <p className="text-slate-500 dark:text-gray-400 text-xs font-medium tracking-wider uppercase">Admin Portal</p>
+            <h1 className="text-xl font-bold text-gradient leading-tight">ISROUTE</h1>
+            {/* BRGY. name — mirrors mobile HomeScreen's "Welcome, Name" style */}
+            <p className="text-primary-500 dark:text-primary-400 text-xs font-bold tracking-wider uppercase">
+              BRGY. {getBrgyName(admin)}
+            </p>
           </div>
         </div>
       </div>
@@ -54,6 +67,16 @@ const Sidebar = () => {
           <MapPin size={20} className={location.pathname === '/map' ? 'text-primary-500' : 'group-hover:text-primary-400 transition-colors'} />
           <span className="font-medium">Live Map View</span>
         </Link>
+
+        {isSuperAdmin && (
+          <Link
+            to="/super-admin"
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ease-out group ${isActive('/super-admin')}`}
+          >
+            <Shield size={20} className={location.pathname === '/super-admin' ? 'text-violet-500' : 'group-hover:text-violet-400 transition-colors'} />
+            <span className="font-medium">Super Admin</span>
+          </Link>
+        )}
       </nav>
 
       <div className="p-4 border-t border-slate-200 dark:border-white/10 m-4 rounded-xl bg-slate-50 dark:bg-white/5 backdrop-blur-sm flex flex-col gap-2">

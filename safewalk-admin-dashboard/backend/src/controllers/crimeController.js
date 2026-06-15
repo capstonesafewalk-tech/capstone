@@ -32,13 +32,13 @@ exports.getArchivedCrimes = async (req, res) => {
 
 exports.createCrime = async (req, res) => {
   try {
-    const { latitude, longitude, crimeType, timestamp } = req.body;
+    const { latitude, longitude, crimeType, timestamp, location } = req.body;
 
     if (!latitude || !longitude || !crimeType || !timestamp) {
       return res.status(400).json({ error: 'All fields are required' });
     }
 
-    const result = await CrimeModel.create(latitude, longitude, crimeType, timestamp);
+    const result = await CrimeModel.create(latitude, longitude, crimeType, timestamp, location || '');
     res.status(201).json({ id: result.insertId, message: 'Crime report created' });
   } catch (error) {
     console.error(error);
@@ -49,13 +49,13 @@ exports.createCrime = async (req, res) => {
 exports.updateCrime = async (req, res) => {
   try {
     const { id } = req.params;
-    const { latitude, longitude, crimeType, timestamp } = req.body;
+    const { latitude, longitude, crimeType, timestamp, location } = req.body;
 
     if (!latitude || !longitude || !crimeType || !timestamp) {
       return res.status(400).json({ error: 'All fields are required' });
     }
 
-    await CrimeModel.update(id, latitude, longitude, crimeType, timestamp);
+    await CrimeModel.update(id, latitude, longitude, crimeType, timestamp, location || '');
     res.json({ message: 'Crime report updated' });
   } catch (error) {
     console.error(error);
