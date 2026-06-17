@@ -4,10 +4,10 @@
   "private": true,
   "main": "safewalk-user/index.js",
   "scripts": {
-    "start": "set EXPO_NO_DOCTOR=1 && expo start",
-    "android": "set EXPO_NO_DOCTOR=1 && expo start --android",
-    "ios": "set EXPO_NO_DOCTOR=1 && expo start --ios",
-    "web": "set EXPO_NO_DOCTOR=1 && expo start --web"
+    "start": "cross-env EXPO_NO_DOCTOR=1 expo start",
+    "android": "cross-env EXPO_NO_DOCTOR=1 expo start --android",
+    "ios": "cross-env EXPO_NO_DOCTOR=1 expo start --ios",
+    "web": "cross-env EXPO_NO_DOCTOR=1 expo start --web"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -32,5 +32,8 @@
     "react-native-svg": "15.12.1",
     "react-native-web": "^0.21.0",
     "react-native-webview": "^13.16.1"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0"
   }
 }
