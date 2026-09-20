@@ -1,297 +1,349 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { apiService } from '../services/apiService';
 import { AlertCircle, Loader } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
+// ── Time-period helpers ───────────────────────────────────────────────────────
+const TIME_PERIODS = [
+  { key: 'all',     label: 'All',   icon: '\ud83d\uddd3\ufe0f' },
+  { key: 'morning', label: 'Day',   icon: '\u2600\ufe0f', hint: 'Configurable day hours' },
+  { key: 'night',   label: 'Night', icon: '\ud83c\udf19', hint: 'Configurable night hours' },
+];
+
+const DEFAULT_BOUNDARIES = { morningStart: 6, morningEnd: 18, nightStart: 18, nightEnd: 6 };
+const LS_KEY = 'sw-crime-time-boundaries';
+
+function loadBoundaries() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    return raw ? { ...DEFAULT_BOUNDARIES, ...JSON.parse(raw) } : DEFAULT_BOUNDARIES;
+  } catch { return DEFAULT_BOUNDARIES; }
+}
+
+function saveBoundaries(b) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(b)); } catch { }
+}
+
+function fmtHour(h) {
+  if (h === 0)  return '12 AM';
+  if (h === 12) return '12 PM';
+  return h < 12 ? `${h} AM` : `${h - 12} PM`;
+}
+
+function getTimePeriod(timestamp, b = DEFAULT_BOUNDARIES) {
+  const h = new Date(timestamp).getHours();
+  if (h >= b.morningStart && h < b.morningEnd) return 'morning';
+  const ns = b.nightStart ?? 18, ne = b.nightEnd ?? 6;
+  if (ns > ne ? (h >= ns || h < ne) : (h >= ns && h < ne)) return 'night';
+  return 'night';
+}
+
+// ── Free OSM tile style (no API key required) ─────────────────────────────────
+const OSM_STYLE = {
+  version: 8,
+  sources: {
+    osm: {
+      type: 'raster',
+      tiles: [
+        'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      ],
+      tileSize: 256,
+      attribution: '\u00a9 OpenStreetMap contributors',
+      maxzoom: 19,
+    },
+  },
+  layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+};
+
+const DEFAULT_CENTER = [122.973944, 10.685750];
+const DEFAULT_ZOOM   = 14;
+
+// ── Alert circle helpers ─────────────────────────────────────────────────────
+/** Generate a GeoJSON Polygon approximating a circle (radiusM in metres). */
+function makeCirclePolygon(centerLng, centerLat, radiusM, steps = 64) {
+  const latR = radiusM / 111320;
+  const lngR = radiusM / (111320 * Math.cos(centerLat * Math.PI / 180));
+  const coords = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * 2 * Math.PI;
+    coords.push([centerLng + lngR * Math.cos(a), centerLat + latR * Math.sin(a)]);
+  }
+  return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] }, properties: {} };
+}
+
+/**
+ * Find all clusters where >= MIN_COUNT crimes are within R degrees of each other.
+ * Returns an array of centroid { lat, lng, count } objects.
+ */
+function findClusters(crimes, MIN_COUNT = 3) {
+  const pts = crimes
+    .filter(c => (c.lat || c.latitude) && (c.lng || c.longitude))
+    .map(c => ({
+      lat: parseFloat(c.lat ?? c.latitude),
+      lng: parseFloat(c.lng ?? c.longitude),
+    }));
+
+  const R = 0.0018; // ≈200 m in degrees
+  const used = new Array(pts.length).fill(false);
+  const clusters = [];
+
+  for (let i = 0; i < pts.length; i++) {
+    if (used[i]) continue;
+    const members = pts.reduce((acc, o, j) => {
+      if (!used[j] && Math.abs(o.lat - pts[i].lat) < R && Math.abs(o.lng - pts[i].lng) < R) acc.push(j);
+      return acc;
+    }, []);
+    if (members.length >= MIN_COUNT) {
+      const lat = members.reduce((s, j) => s + pts[j].lat, 0) / members.length;
+      const lng = members.reduce((s, j) => s + pts[j].lng, 0) / members.length;
+      clusters.push({ lat, lng, count: members.length });
+      members.forEach(j => { used[j] = true; });
+    }
+  }
+  return clusters;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 const MapViewPage = () => {
   const mapContainer = useRef(null);
-  const map = useRef(null);
-  const [crimes, setCrimes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [mapReady, setMapReady] = useState(false);
+  const map          = useRef(null);
+
+  const [crimes,               setCrimes]               = useState([]);
+  const [timePeriod,           setTimePeriod]           = useState('all');
+  const [loading,              setLoading]              = useState(true);
+  const [error,                setError]                = useState(null);
+  const [mapReady,             setMapReady]             = useState(false);
+  const [boundaries,           setBoundaries]           = useState(loadBoundaries);
+  const [showBoundarySettings, setShowBoundarySettings] = useState(false);
   const { isDarkMode } = useTheme();
 
+  const handleBoundaryChange = useCallback((field, value) => {
+    setBoundaries(prev => {
+      const next = { ...prev, [field]: Number(value) };
+      saveBoundaries(next);
+      return next;
+    });
+  }, []);
+
+  // Filtered crimes by selected time period
+  const filteredCrimes = useMemo(() => {
+    if (timePeriod === 'all') return crimes;
+    return crimes.filter(c => c.timestamp && getTimePeriod(c.timestamp, boundaries) === timePeriod);
+  }, [crimes, timePeriod, boundaries]);
+
+  // Fetch crime data
   useEffect(() => {
-    const fetchCrimes = async () => {
+    (async () => {
       try {
         setLoading(true);
-        const activeCrimesData = await apiService.getCrimes();
-        setCrimes(activeCrimesData);
+        const data = await apiService.getCrimes();
+        setCrimes(data);
         setError(null);
       } catch (err) {
-        console.error('Failed to fetch crimes for map:', err);
+        console.error('Failed to fetch crimes:', err);
         setError('Failed to load crime data');
       } finally {
         setLoading(false);
       }
-    };
-    fetchCrimes();
+    })();
   }, []);
 
+  // Initialize map
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
     try {
-      // Default center (10°41'08.7"N 122°58'26.2"E)
-      const DEFAULT_CENTER = [122.973944, 10.685750];
-      const DEFAULT_ZOOM = 14;
-
-        // Create map style using a dark theme map to fit our aesthetic better
-        const style = {
-          version: 8,
-          sources: {
-            'osm-dark': {
-              type: 'raster',
-              tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'],
-              tileSize: 256,
-              attribution: '© OpenStreetMap contributors, © CARTO'
-            },
-            'osm-light': {
-              type: 'raster',
-              tiles: ['https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png'],
-              tileSize: 256,
-              attribution: '© OpenStreetMap contributors, © CARTO'
-            }
-          },
-          layers: [
-            {
-              id: 'osm-layer-dark',
-              type: 'raster',
-              source: 'osm-dark',
-              minzoom: 0,
-              maxzoom: 20,
-              layout: { visibility: 'visible' }
-            },
-            {
-              id: 'osm-layer-light',
-              type: 'raster',
-              source: 'osm-light',
-              minzoom: 0,
-              maxzoom: 20,
-              layout: { visibility: 'none' }
-            }
-          ]
-        };
-
-      // Initialize map
       map.current = new maplibregl.Map({
         container: mapContainer.current,
-        style,
+        style: OSM_STYLE,
         center: DEFAULT_CENTER,
         zoom: DEFAULT_ZOOM,
-        attributionControl: true
+        attributionControl: false,
       });
 
-      // Add controls
-      map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
-      
-      // Add crime zones when map loads
+      map.current.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
+      map.current.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+
       map.current.on('load', () => {
-        // Safe zones source
-        if (!map.current.getSource('safe-zones')) {
-          map.current.addSource('safe-zones', {
-            type: 'geojson',
-            data: {
-              type: 'FeatureCollection',
-              features: [
-                { type: 'Feature', geometry: { type: 'Point', coordinates: [122.9730, 10.6860] }, properties: { name: 'Safe Zone 1' } },
-                { type: 'Feature', geometry: { type: 'Point', coordinates: [122.9760, 10.6840] }, properties: { name: 'Safe Zone 2' } },
-              ]
-            }
-          });
+        // Add crime heatmap source
+        map.current.addSource('crimes', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] },
+        });
 
-          map.current.addLayer({
-            id: 'safe-zones-circle',
-            type: 'circle',
-            source: 'safe-zones',
-            paint: {
-              'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 15, 15, 40],
-              'circle-color': '#10B981',
-              'circle-opacity': 0.6,
-              'circle-stroke-color': '#059669',
-              'circle-stroke-width': 2
-            }
-          });
-
-          map.current.on('mouseenter', 'safe-zones-circle', () => {
-            map.current.getCanvas().style.cursor = 'pointer';
-          });
-          map.current.on('mouseleave', 'safe-zones-circle', () => {
-            map.current.getCanvas().style.cursor = '';
-          });
-        }
-
-        // Risk zones source
-        if (!map.current.getSource('risk-zones')) {
-          map.current.addSource('risk-zones', {
-            type: 'geojson',
-            data: {
-              type: 'FeatureCollection',
-              features: []
-            }
-          });
-
-          // Risk zone circles
-          map.current.addLayer({
-            id: 'risk-zones-circle',
-            type: 'circle',
-            source: 'risk-zones',
-            paint: {
-              'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 12, 15, 35],
-              'circle-color': '#EF4444',
-              'circle-opacity': 0.7,
-              'circle-stroke-color': '#DC2626',
-              'circle-stroke-width': 2
-            }
-          });
-
-          // Risk zone heatmap
-          map.current.addLayer({
-            id: 'crime-heatmap',
-            type: 'heatmap',
-            source: 'risk-zones',
-            maxzoom: 15,
-            paint: {
-              'heatmap-weight': ['interpolate', ['linear'], ['get', 'intensity'], 0, 0, 100, 1],
-              'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1, 9, 3],
-              'heatmap-color': [
-                'interpolate',
-                ['linear'],
-                ['heatmap-density'],
-                0, 'rgba(0, 0, 255, 0)',
-                0.2, 'rgba(0, 255, 255, 0.5)',
-                0.4, 'rgba(0, 255, 0, 0.7)',
-                0.6, 'rgba(255, 255, 0, 0.8)',
-                0.8, 'rgba(255, 165, 0, 0.9)',
-                1, 'rgba(255, 0, 0, 1)'
-              ],
-              'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 2, 9, 20]
-            }
-          });
-          
-          // Add click event for risk zones
-          map.current.on('click', 'risk-zones-circle', (e) => {
-            if (!e.features || !e.features[0]) return;
-            
-            const feature = e.features[0];
-            const coordinates = feature.geometry.coordinates.slice();
-            const { crime_type, id, timestamp } = feature.properties;
-
-            new maplibregl.Popup({ maxWidth: '300px' })
-              .setLngLat(coordinates)
-              .setHTML(`
-                <div class="p-3">
-                  <strong>Crime Report</strong><br/>
-                  <small>ID: ${id}</small><br/>
-                  <small>Type: ${crime_type}</small><br/>
-                  <small>Time: ${new Date(timestamp).toLocaleString()}</small>
-                </div>
-              `)
-              .addTo(map.current);
-          });
-          
-          map.current.on('mouseenter', 'risk-zones-circle', () => {
-            map.current.getCanvas().style.cursor = 'pointer';
-          });
-          
-          map.current.on('mouseleave', 'risk-zones-circle', () => {
-            map.current.getCanvas().style.cursor = '';
-          });
-        }
+        // Heatmap layer
+        map.current.addLayer({
+          id: 'crime-heatmap',
+          type: 'heatmap',
+          source: 'crimes',
+          paint: {
+            'heatmap-weight':    ['interpolate', ['linear'], ['get', 'intensity'], 0, 0, 100, 1],
+            'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1, 15, 3],
+            'heatmap-radius':    ['interpolate', ['linear'], ['zoom'], 0, 8, 15, 30],
+            'heatmap-opacity':   ['interpolate', ['linear'], ['zoom'], 12, 1, 18, 0.6],
+            'heatmap-color': [
+              'interpolate', ['linear'], ['heatmap-density'],
+              0,   'rgba(0,0,255,0)',
+              0.2, 'rgba(0,255,255,0.6)',
+              0.4, 'rgba(0,255,0,0.7)',
+              0.6, 'rgba(255,255,0,0.85)',
+              0.8, 'rgba(255,128,0,0.9)',
+              1,   'rgba(255,0,0,1)',
+            ],
+          },
+        });
 
         setMapReady(true);
+        // Force resize so map fills its container correctly
+        setTimeout(() => map.current && map.current.resize(), 150);
       });
 
-      map.current.on('error', (e) => {
-        console.error('Map error:', e);
-        setError('Map initialization error');
+      map.current.on('load', () => {
+        // ── Alert circles source (drawn BELOW heatmap) ──
+        map.current.addSource('alert-circles', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] },
+        });
+
+        // Green zone fill (500 m)
+        map.current.addLayer({ id: 'alert-green-fill', type: 'fill', source: 'alert-circles',
+          filter: ['==', ['get', 'zone'], 'green'],
+          paint: { 'fill-color': '#22c55e', 'fill-opacity': 0.08 } });
+        map.current.addLayer({ id: 'alert-green-stroke', type: 'line', source: 'alert-circles',
+          filter: ['==', ['get', 'zone'], 'green'],
+          paint: { 'line-color': '#22c55e', 'line-width': 2, 'line-opacity': 0.6 } });
+
+        // Yellow zone fill (300 m)
+        map.current.addLayer({ id: 'alert-yellow-fill', type: 'fill', source: 'alert-circles',
+          filter: ['==', ['get', 'zone'], 'yellow'],
+          paint: { 'fill-color': '#eab308', 'fill-opacity': 0.12 } });
+        map.current.addLayer({ id: 'alert-yellow-stroke', type: 'line', source: 'alert-circles',
+          filter: ['==', ['get', 'zone'], 'yellow'],
+          paint: { 'line-color': '#eab308', 'line-width': 2, 'line-opacity': 0.75 } });
+
+        // Red zone fill (200 m)
+        map.current.addLayer({ id: 'alert-red-fill', type: 'fill', source: 'alert-circles',
+          filter: ['==', ['get', 'zone'], 'red'],
+          paint: { 'fill-color': '#ef4444', 'fill-opacity': 0.18 } });
+        map.current.addLayer({ id: 'alert-red-stroke', type: 'line', source: 'alert-circles',
+          filter: ['==', ['get', 'zone'], 'red'],
+          paint: { 'line-color': '#ef4444', 'line-width': 2.5, 'line-opacity': 0.9 } });
       });
 
-    } catch (error) {
-      console.error('Map setup error:', error);
+      map.current.on('error', e => console.warn('Map tile error:', e));
+    } catch (e) {
+      console.error('Map setup error:', e);
       setError('Failed to initialize map');
     }
 
     return () => {
-      if (map.current) {
-        map.current.remove();
-        map.current = null;
-      }
+      if (map.current) { map.current.remove(); map.current = null; }
     };
   }, []);
 
+  // Dark mode via CSS filter on canvas
   useEffect(() => {
-    if (!map.current || !mapReady) return;
-    try {
-      map.current.setLayoutProperty('osm-layer-dark', 'visibility', isDarkMode ? 'visible' : 'none');
-      map.current.setLayoutProperty('osm-layer-light', 'visibility', isDarkMode ? 'none' : 'visible');
-    } catch (err) {
-      console.error('Error updating map style:', err);
-    }
-  }, [isDarkMode, mapReady]);
-
-  useEffect(() => {
-    if (!map.current || !mapReady) return;
-    
-    const updateRiskZones = () => {
-      if (map.current.getSource('risk-zones')) {
-        try {
-          const features = crimes
-            .filter(crime => crime.latitude && crime.longitude)
-            .map((crime, index) => ({
-              type: 'Feature',
-              geometry: { 
-                type: 'Point', 
-                coordinates: [Number(crime.longitude), Number(crime.latitude)]
-              },
-              properties: { 
-                crime_type: crime.crime_type || 'Unknown', 
-                id: crime.id,
-                intensity: 50 + (index % 50),
-                timestamp: crime.timestamp
-              }
-            }));
-
-          // Ensure a risk zone circle is visible near the default center
-          features.push({
-            type: 'Feature',
-            geometry: { 
-              type: 'Point', 
-              coordinates: [122.9745, 10.6865]
-            },
-            properties: { 
-              crime_type: 'Reported Incident', 
-              id: 'mock-risk-zone',
-              intensity: 100,
-              timestamp: new Date().toISOString()
-            }
-          });
-
-          map.current.getSource('risk-zones').setData({
-            type: 'FeatureCollection',
-            features
-          });
-        } catch (err) {
-          console.error('Error updating risk zones:', err);
-        }
+    const apply = () => {
+      const canvas = map.current?.getCanvas();
+      if (canvas) {
+        canvas.style.filter = isDarkMode
+          ? 'invert(1) hue-rotate(180deg) brightness(0.8) contrast(1.1)'
+          : 'none';
       }
     };
+    if (mapReady) apply();
+    else if (map.current) map.current.once('load', apply);
+  }, [isDarkMode, mapReady]);
 
-    if (map.current.isStyleLoaded && map.current.isStyleLoaded()) {
-      updateRiskZones();
-    } else {
-      map.current.once('idle', updateRiskZones);
+  // Update heatmap + alert circles
+  useEffect(() => {
+    if (!map.current || !mapReady) return;
+
+    // -- Heatmap --
+    const features = filteredCrimes
+      .filter(c => (c.lat || c.latitude) && (c.lng || c.longitude))
+      .map((c, i) => ({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [
+            Number(c.lng ?? c.longitude),
+            Number(c.lat ?? c.latitude),
+          ],
+        },
+        properties: { intensity: 50 + (i % 50), crime_type: c.crime_type || c.type || 'Unknown', id: c.id },
+      }));
+    const crimeSource = map.current.getSource('crimes');
+    if (crimeSource) crimeSource.setData({ type: 'FeatureCollection', features });
+
+    // -- Alert circles: draw zones for every cluster with >= 3 reports --
+    const circleSource = map.current.getSource('alert-circles');
+    if (circleSource) {
+      const clusters = findClusters(filteredCrimes, 3);
+      const circleFeatures = [];
+      clusters.forEach(({ lat, lng }) => {
+        const g = { ...makeCirclePolygon(lng, lat, 500), properties: { zone: 'green' } };
+        const y = { ...makeCirclePolygon(lng, lat, 300), properties: { zone: 'yellow' } };
+        const r = { ...makeCirclePolygon(lng, lat, 200), properties: { zone: 'red' } };
+        circleFeatures.push(g, y, r);
+      });
+      circleSource.setData({ type: 'FeatureCollection', features: circleFeatures });
     }
-  }, [crimes, mapReady]);
+  }, [filteredCrimes, mapReady]);
 
+  // Resize map when settings panel opens/closes
+  useEffect(() => {
+    if (mapReady && map.current) {
+      setTimeout(() => map.current && map.current.resize(), 80);
+    }
+  }, [showBoundarySettings, mapReady]);
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="p-8 h-[calc(100vh-2rem)] flex flex-col">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Live Map <span className="text-primary-600 dark:text-primary-500 font-light">View</span></h1>
-        <div className="flex gap-4">
+    <div
+      className="flex flex-col"
+      style={{ height: 'calc(100vh - 4rem)', padding: '2rem', boxSizing: 'border-box' }}
+    >
+      {/* Header */}
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-3 flex-shrink-0">
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+          Live Map <span className="text-primary-600 dark:text-primary-500 font-light">View</span>
+        </h1>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Time-period filter */}
+          <div className="flex items-center bg-slate-100 dark:bg-white/5 p-1 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm gap-1">
+            {TIME_PERIODS.map(p => (
+              <button
+                key={p.key}
+                onClick={() => setTimePeriod(p.key)}
+                title={p.hint || ''}
+                className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${
+                  timePeriod === p.key
+                    ? 'bg-primary-500 text-white shadow-[0_2px_8px_rgba(59,130,246,0.35)]'
+                    : 'text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <span>{p.icon}</span>
+                <span>{p.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Settings toggle */}
+          <button
+            onClick={() => setShowBoundarySettings(s => !s)}
+            title="Configure day/night hours"
+            className={`w-9 h-9 rounded-xl border flex items-center justify-center text-base transition-all ${
+              showBoundarySettings
+                ? 'bg-primary-500/10 border-primary-400 text-primary-600 dark:text-primary-400'
+                : 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
+            }`}
+          >\u2699\ufe0f</button>
+
           {loading && (
             <div className="glass px-4 py-2 rounded-xl flex items-center gap-2">
               <Loader className="animate-spin text-primary-500" size={18} />
@@ -307,42 +359,72 @@ const MapViewPage = () => {
         </div>
       </div>
 
-      <div className="glass-card flex-1 relative overflow-hidden flex flex-col min-h-[500px]">
-        <div ref={mapContainer} className="w-full h-full absolute inset-0" />
-        
-        {/* Floating overlays over map */}
-        <div className="absolute bottom-6 left-6 right-6 grid grid-cols-1 md:grid-cols-2 gap-4 pointer-events-none">
-          <div className="glass p-5 pointer-events-auto hover:bg-white/90 dark:hover:bg-white/20 transition-colors duration-300 rounded-2xl shadow-2xl">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-primary-500 animate-pulse"></span>
-                Active Crime Hotspots
-              </h3>
-              <span className="bg-primary-50 dark:bg-primary-500/20 text-primary-700 dark:text-primary-300 px-3 py-1 rounded-full text-xs font-bold border border-primary-200 dark:border-primary-500/30">
-                {crimes.length} Reports
-              </span>
-            </div>
-            <p className="text-slate-600 dark:text-gray-300 text-sm">Real-time geographical distribution of reported incidents in the active monitoring area.</p>
-          </div>
-          
-          <div className="glass p-5 pointer-events-auto hover:bg-white/90 dark:hover:bg-white/20 transition-colors duration-300 rounded-2xl shadow-2xl">
-            <h3 className="font-bold text-slate-900 dark:text-white tracking-tight mb-3">Map Legend</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-4 h-4 rounded-full bg-red-500/70 border-2 border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"></div>
-                <span className="text-slate-600 dark:text-gray-300 text-sm">Crime Locations</span>
+      {/* Boundary settings panel */}
+      {showBoundarySettings && (
+        <div className="glass-card p-5 mb-3 border border-primary-200 dark:border-primary-500/30 flex-shrink-0">
+          <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4 uppercase tracking-wider">
+            \u2699\ufe0f Customize Day &amp; Night Hours
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Day */}
+            <div className="bg-amber-50/60 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">\u2600\ufe0f</span>
+                <span className="text-sm font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider">Day</span>
+                <span className="ml-auto text-xs text-amber-600 dark:text-amber-400 font-mono bg-amber-100 dark:bg-amber-500/20 px-2 py-0.5 rounded-lg">
+                  {fmtHour(boundaries.morningStart)} \u2013 {fmtHour(boundaries.morningEnd)}
+                </span>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="w-4 h-4 rounded-full bg-emerald-500/60 border-2 border-emerald-600 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
-                <span className="text-slate-600 dark:text-gray-300 text-sm">Safe Zones</span>
-              </div>
-              <div className="flex items-center gap-3 col-span-2">
-                <div className="h-2 flex-1 bg-gradient-to-r from-blue-500/0 via-yellow-500 to-red-600 rounded-full"></div>
-                <span className="text-gray-300 text-sm w-32">Heatmap Density</span>
+              <div className="grid grid-cols-2 gap-3">
+                {[{ field: 'morningStart', label: 'Starts at' }, { field: 'morningEnd', label: 'Ends at' }].map(({ field, label }) => (
+                  <div key={field}>
+                    <label className="block text-amber-600 dark:text-amber-400 text-xs font-semibold mb-1.5 uppercase tracking-wider">{label}</label>
+                    <div className="flex items-center gap-2">
+                      <input type="number" min={0} max={23} value={boundaries[field]}
+                        onChange={e => handleBoundaryChange(field, e.target.value)}
+                        className="w-16 px-2 py-1.5 text-sm bg-white dark:bg-dark-900/70 border border-amber-300 dark:border-amber-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 text-slate-900 dark:text-white font-mono"
+                      />
+                      <span className="text-xs text-amber-500 dark:text-amber-400 font-semibold">{fmtHour(Number(boundaries[field]))}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
+            {/* Night */}
+            <div className="bg-indigo-50/60 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">\ud83c\udf19</span>
+                <span className="text-sm font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider">Night</span>
+                <span className="ml-auto text-xs text-indigo-600 dark:text-indigo-400 font-mono bg-indigo-100 dark:bg-indigo-500/20 px-2 py-0.5 rounded-lg">
+                  {fmtHour(boundaries.nightStart ?? 18)} \u2013 {fmtHour(boundaries.nightEnd ?? 6)}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[{ field: 'nightStart', label: 'Starts at', def: 18 }, { field: 'nightEnd', label: 'Ends at', def: 6 }].map(({ field, label, def }) => (
+                  <div key={field}>
+                    <label className="block text-indigo-600 dark:text-indigo-400 text-xs font-semibold mb-1.5 uppercase tracking-wider">{label}</label>
+                    <div className="flex items-center gap-2">
+                      <input type="number" min={0} max={23} value={boundaries[field] ?? def}
+                        onChange={e => handleBoundaryChange(field, e.target.value)}
+                        className="w-16 px-2 py-1.5 text-sm bg-white dark:bg-dark-900/70 border border-indigo-300 dark:border-indigo-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 text-slate-900 dark:text-white font-mono"
+                      />
+                      <span className="text-xs text-indigo-500 dark:text-indigo-400 font-semibold">{fmtHour(Number(boundaries[field] ?? def))}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-gradient-to-r from-indigo-400 via-violet-500 to-indigo-400 opacity-60" />
+            </div>
           </div>
+          <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">\u26a1 Saved to browser \u00b7 shared with Incident Management page.</p>
         </div>
+      )}
+
+      {/* Map */}
+      <div className="glass-card flex-1 min-h-0 relative overflow-hidden rounded-2xl">
+        <div ref={mapContainer} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+
+
       </div>
     </div>
   );

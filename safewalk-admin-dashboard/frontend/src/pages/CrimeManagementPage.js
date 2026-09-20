@@ -203,6 +203,45 @@ document.getElementById('confBtn').addEventListener('click',function(){
 </body>
 </html>`;
 
+// ── Time-period helpers ───────────────────────────────────────────────────────
+const DEFAULT_BOUNDARIES = { morningStart: 6, morningEnd: 18, nightStart: 18, nightEnd: 6 };
+
+const TIME_PERIODS = [
+  { key: 'all',     label: 'All',   icon: '🗓️' },
+  { key: 'morning', label: 'Day',   icon: '☀️', hint: 'Configurable day hours' },
+  { key: 'night',   label: 'Night', icon: '🌙', hint: 'Configurable night hours' },
+];
+
+/** Format an integer hour (0-23) as a readable 12-hour string, e.g. 6 → "6 AM", 18 → "6 PM" */
+function fmtHour(h) {
+  if (h === 0)  return '12 AM';
+  if (h === 12) return '12 PM';
+  return h < 12 ? `${h} AM` : `${h - 12} PM`;
+}
+
+function loadBoundaries() {
+  try {
+    const raw = localStorage.getItem('sw-crime-time-boundaries');
+    return raw ? { ...DEFAULT_BOUNDARIES, ...JSON.parse(raw) } : DEFAULT_BOUNDARIES;
+  } catch { return DEFAULT_BOUNDARIES; }
+}
+
+function saveBoundaries(b) {
+  try { localStorage.setItem('sw-crime-time-boundaries', JSON.stringify(b)); } catch { }
+}
+
+/**
+ * Day   = morningStart (inclusive) → morningEnd (exclusive)
+ * Night = nightStart → nightEnd (can wrap midnight, e.g. 18 → 6)
+ */
+function getTimePeriod(timestamp, b = DEFAULT_BOUNDARIES) {
+  const h = new Date(timestamp).getHours();
+  if (h >= b.morningStart && h < b.morningEnd) return 'morning';
+  const ns = b.nightStart ?? 18, ne = b.nightEnd ?? 6;
+  if (ns > ne ? (h >= ns || h < ne) : (h >= ns && h < ne)) return 'night';
+  return 'night';
+}
+
 // ── Single source of truth for incident types (matches mobile app) ──
 const INCIDENT_TYPES = [
   { value: 'Theft', label: 'Theft', color: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/20' },
@@ -252,6 +291,33 @@ const CrimeManagementPage = () => {
   // Photo lightbox state — photos loaded on demand from incident_photos collection
   const [photoModal, setPhotoModal] = useState(null); // { photos: [], index: 0 }
   const [loadingPhotos, setLoadingPhotos] = useState(false);
+
+  // ── Time-period filter state ──────────────────────────────────────────────
+  const [timePeriod, setTimePeriod] = useState('all');
+  const [boundaries, setBoundaries] = useState(loadBoundaries);
+  const [showBoundarySettings, setShowBoundarySettings] = useState(false);
+
+  // Derived filtered lists (incidents have timestamps too; filter all three)
+  const filteredCrimes = React.useMemo(() => {
+    if (timePeriod === 'all') return crimes;
+    return crimes.filter(c => c.timestamp && getTimePeriod(c.timestamp, boundaries) === timePeriod);
+  }, [crimes, timePeriod, boundaries]);
+
+  const filteredArchived = React.useMemo(() => {
+    if (timePeriod === 'all') return archivedCrimes;
+    return archivedCrimes.filter(c => c.timestamp && getTimePeriod(c.timestamp, boundaries) === timePeriod);
+  }, [archivedCrimes, timePeriod, boundaries]);
+
+  const filteredIncidents = React.useMemo(() => {
+    if (timePeriod === 'all') return incidents;
+    return incidents.filter(i => i.timestamp && getTimePeriod(i.timestamp, boundaries) === timePeriod);
+  }, [incidents, timePeriod, boundaries]);
+
+  const handleBoundaryChange = (field, value) => {
+    const next = { ...boundaries, [field]: Number(value) };
+    setBoundaries(next);
+    saveBoundaries(next);
+  };
 
   const openPhotoModal = async (incidentId, photoCount) => {
     if (!photoCount || photoCount === 0) return;
@@ -450,14 +516,14 @@ const CrimeManagementPage = () => {
     </div>
   );
 
-  const displayCrimes = activeTab === 'active' ? crimes : archivedCrimes;
-  const currentList = activeTab === 'incidents' ? incidents : displayCrimes;
+  const displayCrimes = activeTab === 'active' ? filteredCrimes : filteredArchived;
+  const currentList = activeTab === 'incidents' ? filteredIncidents : displayCrimes;
   const totalPages = Math.max(1, Math.ceil(currentList.length / PAGE_SIZE));
   const pagedItems = currentList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center mb-4">
         <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Incident <span className="text-primary-600 dark:text-primary-500 font-light">Management</span></h1>
         {activeTab !== 'incidents' && (
           <button
@@ -469,6 +535,119 @@ const CrimeManagementPage = () => {
           </button>
         )}
       </div>
+
+      {/* ── Time-period filter bar ─────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="flex items-center bg-slate-100 dark:bg-white/5 p-1 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm gap-1">
+          {TIME_PERIODS.map(p => {
+            // Show count per period for non-all
+            const rawList = activeTab === 'active' ? crimes : activeTab === 'archived' ? archivedCrimes : incidents;
+            const count = p.key === 'all' ? rawList.length : rawList.filter(c => c.timestamp && getTimePeriod(c.timestamp, boundaries) === p.key).length;
+            return (
+              <button
+                key={p.key}
+                onClick={() => { setTimePeriod(p.key); setCurrentPage(1); }}
+                title={p.hint || ''}
+                className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${timePeriod === p.key
+                  ? 'bg-primary-500 text-white shadow-[0_2px_8px_rgba(59,130,246,0.35)]'
+                  : 'text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+              >
+                <span>{p.icon}</span>
+                <span>{p.label}</span>
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-lg ${timePeriod === p.key ? 'bg-white/25' : 'bg-slate-200 dark:bg-white/10'
+                  }`}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ⚙️ Configurable boundaries toggle */}
+        <button
+          onClick={() => setShowBoundarySettings(s => !s)}
+          title="Configure time boundaries"
+          className={`w-9 h-9 rounded-xl border flex items-center justify-center text-base transition-all ${showBoundarySettings
+            ? 'bg-primary-500/10 border-primary-400 text-primary-600 dark:text-primary-400'
+            : 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
+            }`}
+        >⚙️</button>
+      </div>
+
+      {/* ── Boundary settings panel ──────────────────────────────────────────── */}
+      {showBoundarySettings && (
+        <div className="glass-card p-5 mb-6 border border-primary-200 dark:border-primary-500/30">
+          <h3 className="text-sm font-bold text-slate-700 dark:text-white mb-4 uppercase tracking-wider">
+            ⚙️ Customize Day &amp; Night Hours
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Day block */}
+            <div className="bg-amber-50/60 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">☀️</span>
+                <span className="text-sm font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider">Day</span>
+                <span className="ml-auto text-xs text-amber-600 dark:text-amber-400 font-mono bg-amber-100 dark:bg-amber-500/20 px-2 py-0.5 rounded-lg">
+                  {fmtHour(boundaries.morningStart)} – {fmtHour(boundaries.morningEnd)}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { field: 'morningStart', label: 'Starts at' },
+                  { field: 'morningEnd',   label: 'Ends at'   },
+                ].map(({ field, label }) => (
+                  <div key={field}>
+                    <label className="block text-amber-600 dark:text-amber-400 text-xs font-semibold mb-1.5 uppercase tracking-wider">{label}</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={23}
+                        value={boundaries[field]}
+                        onChange={e => handleBoundaryChange(field, e.target.value)}
+                        className="w-16 px-2 py-1.5 text-sm bg-white dark:bg-dark-900/70 border border-amber-300 dark:border-amber-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 text-slate-900 dark:text-white font-mono"
+                      />
+                      <span className="text-xs text-amber-500 dark:text-amber-400 font-semibold">{fmtHour(Number(boundaries[field]))}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Night block */}
+            <div className="bg-indigo-50/60 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">🌙</span>
+                <span className="text-sm font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider">Night</span>
+                <span className="ml-auto text-xs text-indigo-600 dark:text-indigo-400 font-mono bg-indigo-100 dark:bg-indigo-500/20 px-2 py-0.5 rounded-lg">
+                  {fmtHour(boundaries.nightStart ?? 18)} – {fmtHour(boundaries.nightEnd ?? 6)}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { field: 'nightStart', label: 'Starts at', def: 18 },
+                  { field: 'nightEnd',   label: 'Ends at',   def: 6  },
+                ].map(({ field, label, def }) => (
+                  <div key={field}>
+                    <label className="block text-indigo-600 dark:text-indigo-400 text-xs font-semibold mb-1.5 uppercase tracking-wider">{label}</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={23}
+                        value={boundaries[field] ?? def}
+                        onChange={e => handleBoundaryChange(field, e.target.value)}
+                        className="w-16 px-2 py-1.5 text-sm bg-white dark:bg-dark-900/70 border border-indigo-300 dark:border-indigo-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 text-slate-900 dark:text-white font-mono"
+                      />
+                      <span className="text-xs text-indigo-500 dark:text-indigo-400 font-semibold">{fmtHour(Number(boundaries[field] ?? def))}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-gradient-to-r from-indigo-400 via-violet-500 to-indigo-400 opacity-60" />
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">⚡ Settings are saved to your browser and shared with the Map View.</p>
+        </div>
+      )}
 
       {/* Form - Only show for crimes tab */}
       {showForm && activeTab !== 'incidents' && (
@@ -617,19 +796,19 @@ const CrimeManagementPage = () => {
           onClick={() => { setActiveTab('active'); setCurrentPage(1); }}
           className={`px-6 py-2.5 rounded-xl font-medium transition-all duration-300 ${activeTab === 'active' ? 'bg-primary-500 text-white shadow-[0_4px_12px_rgba(59,130,246,0.3)]' : 'text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'}`}
         >
-          Active Incidents ({crimes.length})
+          Active Incidents ({timePeriod === 'all' ? crimes.length : `${filteredCrimes.length}/${crimes.length}`})
         </button>
         <button
           onClick={() => { setActiveTab('archived'); setCurrentPage(1); }}
           className={`px-6 py-2.5 rounded-xl font-medium transition-all duration-300 ${activeTab === 'archived' ? 'bg-primary-500 text-white shadow-[0_4px_12px_rgba(59,130,246,0.3)]' : 'text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'}`}
         >
-          Archived ({archivedCrimes.length})
+          Archived ({timePeriod === 'all' ? archivedCrimes.length : `${filteredArchived.length}/${archivedCrimes.length}`})
         </button>
         <button
           onClick={() => { setActiveTab('incidents'); setCurrentPage(1); }}
           className={`px-6 py-2.5 rounded-xl font-medium transition-all duration-300 ${activeTab === 'incidents' ? 'bg-primary-500 text-white shadow-[0_4px_12px_rgba(59,130,246,0.3)]' : 'text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'}`}
         >
-          User Reports ({incidents.length})
+          User Reports ({timePeriod === 'all' ? incidents.length : `${filteredIncidents.length}/${incidents.length}`})
         </button>
       </div>
 
@@ -711,11 +890,10 @@ const CrimeManagementPage = () => {
                 <tr className="border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-gray-400 text-sm tracking-wider uppercase">
                   <th className="text-left p-4 font-medium">ID</th>
                   <th className="text-left p-4 font-medium">Type</th>
-                  <th className="text-left p-4 font-medium">Barangay</th>
-                  <th className="text-left p-4 font-medium">Description</th>
-                  <th className="text-left p-4 font-medium">Photos</th>
                   <th className="text-left p-4 font-medium">Location</th>
-                  <th className="text-left p-4 font-medium">Date</th>
+                  <th className="text-left p-4 font-medium">Longitude</th>
+                  <th className="text-left p-4 font-medium">Latitude</th>
+                  <th className="text-left p-4 font-medium">Date &amp; Time</th>
                   <th className="text-left p-4 font-medium">Actions</th>
                 </tr>
               </thead>
@@ -732,32 +910,34 @@ const CrimeManagementPage = () => {
                         );
                       })()}
                     </td>
-                    <td className="p-4 text-sm">
-                      {incident.brgy ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-500/20">
-                          🏘️ Brgy. {incident.brgy}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 text-xs">—</span>
-                      )}
+                    <td className="p-4 text-sm text-slate-600 dark:text-gray-400">
+                      {incident.location
+                        ? <span className="truncate block" title={incident.location}>{incident.location}</span>
+                        : <span className="text-slate-400 text-xs">—</span>}
                     </td>
-                    <td className="p-4 text-sm text-slate-600 dark:text-gray-400 max-w-xs truncate">{incident.description}</td>
-                    <td className="p-4">
-                      {(incident.photoCount > 0 || (incident.photos && incident.photos.length > 0)) ? (
-                        <button
-                          onClick={() => openPhotoModal(incident.id, incident.photoCount || incident.photos?.length)}
-                          disabled={loadingPhotos}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors disabled:opacity-50"
-                        >
-                          <Image size={12} />
-                          {loadingPhotos ? 'Loading…' : `${incident.photoCount || incident.photos?.length} photo${(incident.photoCount || incident.photos?.length) !== 1 ? 's' : ''}`}
-                        </button>
-                      ) : (
-                        <span className="text-slate-400 dark:text-slate-500 text-xs">—</span>
-                      )}
+                    <td className="p-4 text-sm font-mono text-slate-600 dark:text-gray-400">
+                      {(() => {
+                        const val = incident.lng ?? incident.longitude ??
+                          (incident.location && /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(incident.location.trim())
+                            ? parseFloat(incident.location.split(',')[1])
+                            : null);
+                        return val != null
+                          ? parseFloat(val).toFixed(6)
+                          : <span className="text-slate-400">—</span>;
+                      })()}
                     </td>
-                    <td className="p-4 text-sm text-slate-600 dark:text-gray-400">{incident.location}</td>
-                    <td className="p-4 text-sm text-slate-600 dark:text-gray-400">{new Date(incident.timestamp).toLocaleString()}</td>
+                    <td className="p-4 text-sm font-mono text-slate-600 dark:text-gray-400">
+                      {(() => {
+                        const val = incident.lat ?? incident.latitude ??
+                          (incident.location && /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(incident.location.trim())
+                            ? parseFloat(incident.location.split(',')[0])
+                            : null);
+                        return val != null
+                          ? parseFloat(val).toFixed(6)
+                          : <span className="text-slate-400">—</span>;
+                      })()}
+                    </td>
+                    <td className="p-4 text-sm text-slate-600 dark:text-gray-400 whitespace-nowrap">{incident.timestamp ? new Date(incident.timestamp).toLocaleString() : '—'}</td>
                     <td className="p-4 flex gap-3">
                       <button
                         onClick={() => handleApproveIncident(incident)}
@@ -817,11 +997,10 @@ const CrimeManagementPage = () => {
                     <button
                       key={item}
                       onClick={() => setCurrentPage(item)}
-                      className={`w-8 h-8 rounded-lg text-sm font-medium transition-all ${
-                        item === currentPage
-                          ? 'bg-primary-500 text-white shadow-[0_2px_8px_rgba(59,130,246,0.4)]'
-                          : 'bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-gray-300 hover:bg-slate-50 dark:hover:bg-white/10'
-                      }`}
+                      className={`w-8 h-8 rounded-lg text-sm font-medium transition-all ${item === currentPage
+                        ? 'bg-primary-500 text-white shadow-[0_2px_8px_rgba(59,130,246,0.4)]'
+                        : 'bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-gray-300 hover:bg-slate-50 dark:hover:bg-white/10'
+                        }`}
                     >
                       {item}
                     </button>
@@ -897,11 +1076,10 @@ const CrimeManagementPage = () => {
                       <button
                         key={i}
                         onClick={() => setPhotoModal(p => ({ ...p, index: i }))}
-                        className={`w-14 h-14 rounded-xl overflow-hidden border-2 transition-all ${
-                          i === photoModal.index
-                            ? 'border-primary-400 scale-105'
-                            : 'border-white/20 opacity-60 hover:opacity-100'
-                        }`}
+                        className={`w-14 h-14 rounded-xl overflow-hidden border-2 transition-all ${i === photoModal.index
+                          ? 'border-primary-400 scale-105'
+                          : 'border-white/20 opacity-60 hover:opacity-100'
+                          }`}
                       >
                         <img src={url} alt={`thumb-${i}`} className="w-full h-full object-cover" />
                       </button>

@@ -1,5 +1,16 @@
 const { db } = require('../config/database');
 
+// ── Time-period helper ──────────────────────────────────────────────────────
+// Returns 'morning' | 'night' for a given timestamp string/Date.
+// Boundaries (hour values, inclusive start / exclusive end):
+//   Morning : morningStart (6) → morningEnd (12)
+//   Night   : everything else (12 → 6)
+function getTimePeriod(timestamp, { morningStart = 6, morningEnd = 12 } = {}) {
+  const h = new Date(timestamp).getHours();
+  if (h >= morningStart && h < morningEnd) return 'morning';
+  return 'night';
+}
+
 class CrimeModel {
   static async getActiveCrimes() {
     const snapshot = await db.collection('crimes')
@@ -114,6 +125,25 @@ class CrimeModel {
       .get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
+
+  // ── Time-period filter ────────────────────────────────────────────────────
+  // Fetches all active crimes then filters by time-of-day period.
+  // period: 'morning' | 'afternoon' | 'night' | 'all'
+  // boundaries: optional { morningStart, morningEnd, afternoonStart, afternoonEnd }
+  static async getActiveCrimesByPeriod(period, boundaries = {}) {
+    const snapshot = await db.collection('crimes')
+      .where('status', '==', 'active')
+      .orderBy('timestamp', 'desc')
+      .get();
+
+    const all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    if (period === 'all' || !period) return all;
+
+    return all.filter(crime => {
+      if (!crime.timestamp) return false;
+      return getTimePeriod(crime.timestamp, boundaries) === period;
+    });
+  }
 }
 
-module.exports = CrimeModel;
+module.exports = { CrimeModel, getTimePeriod };

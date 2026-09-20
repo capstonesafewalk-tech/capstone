@@ -129,7 +129,7 @@ router.patch('/:id', async (req, res) => {
       const firestoreQuery = await db.collection('incidents')
         .where('id', '==', incident.id)
         .get();
-      
+
       if (!firestoreQuery.empty) {
         await firestoreQuery.docs[0].ref.update({
           status: incident.status,

@@ -1,8 +1,11 @@
-const CrimeModel = require('../models/CrimeModel');
+const { CrimeModel, getTimePeriod } = require('../models/CrimeModel'); // eslint-disable-line no-unused-vars
 
 exports.getCrimes = async (req, res) => {
   try {
-    const crimes = await CrimeModel.getActiveCrimes();
+    const { timePeriod } = req.query; // 'morning' | 'night' | 'all' (default: all)
+    const crimes = timePeriod && timePeriod !== 'all'
+      ? await CrimeModel.getActiveCrimesByPeriod(timePeriod)
+      : await CrimeModel.getActiveCrimes();
     res.json(crimes);
   } catch (error) {
     console.error(error);
