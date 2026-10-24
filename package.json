@@ -1,8 +1,8 @@
 {
-  "name": "safewalk",
+  "name": "isroute",
   "version": "1.0.0",
   "private": true,
-  "main": "safewalk-user/index.js",
+  "main": "isroute-user/index.js",
   "scripts": {
     "start": "cross-env EXPO_NO_DOCTOR=1 expo start --clear",
     "android": "cross-env EXPO_NO_DOCTOR=1 expo start --android --clear",
